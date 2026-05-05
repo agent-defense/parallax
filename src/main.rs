@@ -49,7 +49,7 @@ enum Commands {
     /// Configure an agent framework to route through the Parallax security proxy
     Setup {
         /// Agent framework to configure
-        #[arg(long, value_parser = ["openclaw"])]
+        #[arg(long, value_parser = ["openclaw", "claudecode"])]
         framework: String,
 
         /// Proxy host
@@ -68,7 +68,7 @@ enum Commands {
     /// Revert an agent framework to bypass the Parallax proxy
     Revert {
         /// Agent framework to revert
-        #[arg(long, value_parser = ["openclaw"])]
+        #[arg(long, value_parser = ["openclaw", "claudecode"])]
         framework: String,
 
         /// Model ID
@@ -187,8 +187,9 @@ async fn main() {
         Commands::Setup { framework, host, port, model } => {
             match framework.as_str() {
                 "openclaw" => parallax::integrations::openclaw::setup(&host, port, &model),
+                "claudecode" => parallax::integrations::claudecode::setup(&host, port),
                 _ => {
-                    eprintln!("Unsupported framework: {}. Supported: openclaw", framework);
+                    eprintln!("Unsupported framework: {}. Supported: openclaw, claudecode", framework);
                     std::process::exit(1);
                 }
             }
@@ -197,8 +198,9 @@ async fn main() {
         Commands::Revert { framework, model } => {
             match framework.as_str() {
                 "openclaw" => parallax::integrations::openclaw::revert(&model),
+                "claudecode" => parallax::integrations::claudecode::revert(),
                 _ => {
-                    eprintln!("Unsupported framework: {}. Supported: openclaw", framework);
+                    eprintln!("Unsupported framework: {}. Supported: openclaw, claudecode", framework);
                     std::process::exit(1);
                 }
             }

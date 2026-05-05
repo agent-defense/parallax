@@ -1,0 +1,9 @@
+{
+  "name": "parallax-security-claudecode",
+  "version": "0.2.0",
+  "description": "Parallax security integration for Claude Code — forwards lifecycle hook events to the evaluation engine",
+  "dependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  }
+}
