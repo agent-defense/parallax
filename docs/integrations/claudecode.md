@@ -5,31 +5,12 @@ Parallax integrates with [Claude Code](https://claude.ai/code) via its lifecycle
 ## Setup
 
 ```bash
-# 1. Start Parallax in server mode
 parallax serve -c config.yaml
-
-# 2. Install hook dependencies
 cd integrations/claudecode && npm install
-
-# 3. Copy the settings snippet into your Claude Code settings
-#    Project-level:  .claude/settings.json
-#    User-level:     ~/.claude/settings.json
-cp integrations/claudecode/settings.json .claude/settings.json
-
-# 4. Update the script paths in .claude/settings.json to match your Parallax install location
+parallax setup claudecode
 ```
 
-## Requirements
-
-The hooks run via [tsx](https://tsx.is/) — a zero-config TypeScript runner. It is listed as a dependency in `integrations/claudecode/package.json` and installed by `npm install`. Alternatively, `tsx` can be installed globally:
-
-```bash
-npm install -g tsx
-```
-
-## Configuration
-
-Replace `/path/to/parallax` in `.claude/settings.json` with the actual path to your Parallax directory, or use the absolute path from `pwd`.
+The hooks run via [tsx](https://tsx.is/) and are installed through `npm install` in `integrations/claudecode`. `parallax setup claudecode` writes the project hook entries into `.claude/settings.json`; copy the same entries to `~/.claude/settings.json` if you want user-level hooks across projects.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
