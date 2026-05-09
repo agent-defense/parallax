@@ -48,10 +48,21 @@ enum Commands {
 
     /// Configure an agent framework to route through the Parallax security proxy
     Setup {
-        /// Agent framework to configure
-        #[arg(long, value_parser = ["openclaw"])]
-        framework: String,
+        #[command(subcommand)]
+        framework: SetupFramework,
+    },
 
+    /// Revert an agent framework to bypass the Parallax proxy
+    Revert {
+        #[command(subcommand)]
+        framework: RevertFramework,
+    },
+}
+
+#[derive(Subcommand)]
+enum SetupFramework {
+    /// Configure OpenClaw to route through Parallax
+    Openclaw {
         /// Proxy host
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
@@ -65,16 +76,29 @@ enum Commands {
         model: String,
     },
 
-    /// Revert an agent framework to bypass the Parallax proxy
-    Revert {
-        /// Agent framework to revert
-        #[arg(long, value_parser = ["openclaw"])]
-        framework: String,
+    /// Configure Claude Code hooks to route through Parallax
+    Claudecode {
+        /// Proxy host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
 
+        /// Proxy port
+        #[arg(long, default_value = "9920")]
+        port: u16,
+    },
+}
+
+#[derive(Subcommand)]
+enum RevertFramework {
+    /// Revert OpenClaw to use Anthropic directly
+    Openclaw {
         /// Model ID
         #[arg(long, default_value = "claude-sonnet-4-20250514")]
         model: String,
     },
+
+    /// Revert Claude Code hooks
+    Claudecode,
 }
 
 #[tokio::main]
@@ -184,23 +208,23 @@ async fn main() {
             }
         }
 
-        Commands::Setup { framework, host, port, model } => {
-            match framework.as_str() {
-                "openclaw" => parallax::integrations::openclaw::setup(&host, port, &model),
-                _ => {
-                    eprintln!("Unsupported framework: {}. Supported: openclaw", framework);
-                    std::process::exit(1);
+        Commands::Setup { framework } => {
+            match framework {
+                SetupFramework::Openclaw { host, port, model } => {
+                    parallax::integrations::openclaw::setup(&host, port, &model)
+                }
+                SetupFramework::Claudecode { host, port } => {
+                    parallax::integrations::claudecode::setup(&host, port)
                 }
             }
         }
 
-        Commands::Revert { framework, model } => {
-            match framework.as_str() {
-                "openclaw" => parallax::integrations::openclaw::revert(&model),
-                _ => {
-                    eprintln!("Unsupported framework: {}. Supported: openclaw", framework);
-                    std::process::exit(1);
+        Commands::Revert { framework } => {
+            match framework {
+                RevertFramework::Openclaw { model } => {
+                    parallax::integrations::openclaw::revert(&model)
                 }
+                RevertFramework::Claudecode => parallax::integrations::claudecode::revert(),
             }
         }
     }

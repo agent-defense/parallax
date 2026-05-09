@@ -8,7 +8,7 @@ One binary, one YAML config. Evaluates every agent event in microseconds.
 
 - **Single binary, zero runtime dependencies** -- `cargo build --release` produces one static executable. No Python, no JVM, no containers required.
 - **Microsecond evaluation** -- the evaluator chain runs in cost order and short-circuits on the first `block`. Typical decisions complete in under 0.2 ms.
-- **Framework-agnostic** -- works with any agent system that can make HTTP calls. First-class integrations for OpenClaw; LangChain, CrewAI, and OpenAI Agents SDK on the roadmap.
+- **Framework-agnostic** -- works with any agent system that can make HTTP calls. First-class integrations for OpenClaw and Claude Code; LangChain, CrewAI, and OpenAI Agents SDK are on the roadmap.
 - **51 rules out of the box** -- ships with rules covering 13 threat categories: prompt injection, reconnaissance, privilege escalation, PII leakage, supply chain attacks, data exfiltration, and more.
 - **Five evaluator engines** -- regex, keyword pattern, Sigma, CEL expressions, and SQL-based temporal analysis. Mix and match for layered defense.
 
@@ -66,25 +66,9 @@ curl -X POST http://127.0.0.1:9920/evaluate \
 
 Your agent calls `POST /evaluate` before and after each tool execution and acts on the decision.
 
-### 4. Connect to OpenClaw (optional)
+### 4. Connect to an agent framework (optional)
 
-**Proxy mode** — route all LLM traffic through Parallax automatically:
-
-```bash
-parallax setup --framework openclaw
-parallax serve --mode proxy -c config.yaml
-```
-
-**Server mode** — use the OpenClaw plugin to forward lifecycle events:
-
-```bash
-openclaw plugins install --link ./integrations/openclaw
-openclaw plugins enable parallax-security
-openclaw gateway restart
-parallax serve -c config.yaml
-```
-
-See [docs/integrations/openclaw.md](docs/integrations/openclaw.md) for full details. For other frameworks, see [Agent Framework Integrations](#agent-framework-integrations).
+Use `parallax setup <framework>` and `parallax revert <framework>` for framework-specific configuration. OpenClaw supports proxy and server modes; Claude Code uses lifecycle hooks. See [Agent Framework Integrations](#agent-framework-integrations) for the commands and links to the detailed setup guides.
 
 ## Supported Threat Categories
 
@@ -258,30 +242,11 @@ Check `blocked` in the response to decide whether to proceed.
 
 ### OpenClaw
 
-Parallax includes a dedicated integration for [OpenClaw](https://openclaw.ai) agent systems. See [docs/integrations/openclaw.md](docs/integrations/openclaw.md) for full setup instructions.
+Parallax includes a dedicated integration for [OpenClaw](https://openclaw.ai) agent systems. Proxy mode routes OpenClaw traffic through Parallax; server mode uses the plugin under `./integrations/openclaw`. See [docs/integrations/openclaw.md](docs/integrations/openclaw.md) for full setup instructions.
 
-**Proxy setup:**
+### Claude Code
 
-```bash
-parallax setup --framework openclaw
-parallax serve --mode proxy -c config.yaml
-
-# To revert
-parallax revert --framework openclaw
-```
-
-**Server mode:**
-
-```bash
-openclaw plugins install --link ./integrations/openclaw
-openclaw plugins enable parallax-security
-parallax serve -c config.yaml
-```
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PARALLAX_URL` | `http://127.0.0.1:9920/evaluate` | Evaluation endpoint |
-| `PARALLAX_TIMEOUT` | `3000` | Request timeout in ms |
+Parallax includes a dedicated integration for [Claude Code](https://claude.ai/code) agent systems. It writes lifecycle hooks into `.claude/settings.json` and can be installed per-project or copied to a user-level Claude config. See [docs/integrations/claudecode.md](docs/integrations/claudecode.md) for full setup instructions.
 
 ## CLI Reference
 
@@ -293,21 +258,35 @@ parallax serve [OPTIONS]
       --mode <MODE>         server or proxy [default: server]
       --log-level <LEVEL>   Log level [default: info]
 
-parallax setup --framework <FRAMEWORK> [OPTIONS]
+parallax setup <COMMAND>
+  openclaw   Configure OpenClaw to route through Parallax
+  claudecode Configure Claude Code hooks to route through Parallax
+
+parallax setup openclaw [OPTIONS]
       --host <HOST>         Proxy host [default: 127.0.0.1]
       --port <PORT>         Proxy port [default: 9920]
       --model <MODEL>       Model ID [default: claude-sonnet-4-20250514]
 
-parallax revert --framework <FRAMEWORK> [OPTIONS]
+parallax setup claudecode [OPTIONS]
+      --host <HOST>         Proxy host [default: 127.0.0.1]
+      --port <PORT>         Proxy port [default: 9920]
+
+parallax revert <COMMAND>
+  openclaw   Revert OpenClaw to use Anthropic directly
+  claudecode Revert Claude Code hooks
+
+parallax revert openclaw [OPTIONS]
       --model <MODEL>       Model ID [default: claude-sonnet-4-20250514]
+
+parallax revert claudecode
 ```
 
-Supported frameworks: `openclaw` (more coming in v0.3).
+Supported frameworks: `openclaw`, `claudecode` (more coming in v0.3).
 
 ## Roadmap
 
 ### v0.3 -- Multi-Framework & Multi-Provider Support
-- Generic `parallax setup --framework <name>` for LangChain, CrewAI, OpenAI Agents SDK
+- Generic `parallax setup <name>` for LangChain, CrewAI, OpenAI Agents SDK
 - Integration directory structure for framework integrations
 - OpenAI-compatible proxy mode (`/v1/chat/completions`) covering OpenAI, Azure OpenAI, and local models (Ollama, LM Studio)
 - Configurable upstream provider in `config.yaml`

@@ -1,6 +1,6 @@
 # OpenClaw Integration
 
-Parallax includes first-class integration with [OpenClaw](https://openclaw.ai) agent systems. There are two ways to connect them: proxy mode (transparent interception) and server mode (explicit lifecycle hooks).
+Parallax includes first-class integration with [OpenClaw](https://openclaw.ai) agent systems. There are two ways to connect them: proxy mode for transparent interception and server mode for explicit lifecycle hooks.
 
 ## Option 1: Proxy Mode
 
@@ -9,10 +9,7 @@ Proxy mode routes all OpenClaw-to-Anthropic traffic through Parallax. No code ch
 ### Setup
 
 ```bash
-# 1. Configure OpenClaw to route through Parallax
-parallax setup --framework openclaw
-
-# 2. Start the proxy
+parallax setup openclaw
 parallax serve --mode proxy -c config.yaml
 ```
 
@@ -21,7 +18,7 @@ This registers a custom provider in OpenClaw's config that points at the Paralla
 ### Revert
 
 ```bash
-parallax revert --framework openclaw
+parallax revert openclaw
 ```
 
 This restores OpenClaw to use the Anthropic API directly, removes the custom provider, and re-enables the server-mode integration.
@@ -41,11 +38,8 @@ Server mode installs a lightweight TypeScript integration that forwards OpenClaw
 ### Setup
 
 ```bash
-# Install the integration from the integrations directory
 openclaw plugins install --dangerously-force-unsafe-install --link ./integrations/openclaw
 openclaw plugins enable parallax-security
-
-# Start Parallax in server mode
 parallax serve -c config.yaml
 ```
 
