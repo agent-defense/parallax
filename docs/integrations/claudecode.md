@@ -1,16 +1,36 @@
 # Claude Code Integration
 
-Parallax integrates with [Claude Code](https://claude.ai/code) via its lifecycle hooks system. Hook scripts forward events to the Parallax evaluation server, which applies the configured rule chain and returns a verdict.
+Parallax integrates with [Claude Code](https://claude.ai/code) via its lifecycle hooks system. Hook commands forward events to the Parallax evaluation server, which applies the configured rule chain and returns a verdict.
+
+The integration is a native Rust binary — no Node.js or TypeScript runtime required.
 
 ## Setup
 
 ```bash
 parallax serve -c config.yaml
-cd integrations/claudecode && npm install
 parallax setup claudecode
 ```
 
-The hooks run via [tsx](https://tsx.is/) and are installed through `npm install` in `integrations/claudecode`. `parallax setup claudecode` writes the project hook entries into `.claude/settings.json`; copy the same entries to `~/.claude/settings.json` if you want user-level hooks across projects.
+`parallax setup claudecode` writes the hook entries into `~/.claude/settings.json`, making them active for all projects on this machine.
+
+The generated entries look like this:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "parallax claudecode hook pre-tool-use"}]}],
+    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "parallax claudecode hook post-tool-use"}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "parallax claudecode hook notification"}]}]
+  }
+}
+```
+
+For a non-default host or port, pass `--host` / `--port` to the setup command and the env var will be prepended automatically:
+
+```bash
+parallax setup claudecode --host 0.0.0.0 --port 9999
+# writes: PARALLAX_URL=http://0.0.0.0:9999/evaluate parallax claudecode hook pre-tool-use
+```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -19,11 +39,13 @@ The hooks run via [tsx](https://tsx.is/) and are installed through `npm install`
 
 ## What the integration evaluates
 
-| Hook | Stage | Behavior |
-|------|-------|----------|
-| `PreToolUse` | `tool.before` | Sequential — blocks the tool call if verdict is `block` |
-| `PostToolUse` | `tool.after` | Fire-and-forget — logs but doesn't block |
-| `Notification` | `message.before` | Fire-and-forget — logs but doesn't block |
+Each hook reads the Claude Code event JSON from stdin and forwards it to Parallax:
+
+| Hook | Command | Stage | Behavior |
+|------|---------|-------|----------|
+| `PreToolUse` | `parallax claudecode hook pre-tool-use` | `tool.before` | Sequential — blocks the tool call if verdict is `block` |
+| `PostToolUse` | `parallax claudecode hook post-tool-use` | `tool.after` | Fire-and-forget — logs but doesn't block |
+| `Notification` | `parallax claudecode hook notification` | `message.before` | Fire-and-forget — logs but doesn't block |
 
 ## Blocking behavior
 
@@ -38,3 +60,18 @@ Claude Code intercepts this and surfaces the reason to the user instead of execu
 ## Fails open
 
 If Parallax is unreachable or returns an error, all hooks exit `0` and allow the tool call to proceed. This matches the server-mode behavior of the OpenClaw integration.
+
+## Standalone binary
+
+The `integrations/claudecode` crate also produces a standalone `parallax-hooks` binary that implements the same logic without the rest of the parallax CLI:
+
+```bash
+cargo build --release --manifest-path integrations/claudecode/Cargo.toml
+# binary: integrations/claudecode/target/release/parallax-hooks
+
+parallax-hooks pre-tool-use
+parallax-hooks post-tool-use
+parallax-hooks notification
+```
+
+This is useful when you want to install only the hook binary without the full `parallax` binary.
