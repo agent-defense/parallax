@@ -19,14 +19,19 @@ pub fn setup(host: &str, port: u16) {
     println!("Installing Claude Code hooks");
     println!();
 
+    let exe = std::env::current_exe()
+        .unwrap_or_else(|_| PathBuf::from("parallax"))
+        .display()
+        .to_string();
+
     let make_cmd = |event: &str| -> String {
         if host != DEFAULT_HOST || port != DEFAULT_PORT {
             format!(
-                "PARALLAX_URL=http://{}:{}/evaluate parallax claudecode hook {}",
-                host, port, event
+                "PARALLAX_URL=http://{}:{}/evaluate {} claudecode hook {}",
+                host, port, exe, event
             )
         } else {
-            format!("parallax claudecode hook {}", event)
+            format!("{} claudecode hook {}", exe, event)
         }
     };
 

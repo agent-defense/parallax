@@ -18,9 +18,9 @@ The generated entries look like this:
 ```json
 {
   "hooks": {
-    "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "parallax claudecode hook pre-tool-use"}]}],
-    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "parallax claudecode hook post-tool-use"}]}],
-    "Notification": [{"hooks": [{"type": "command", "command": "parallax claudecode hook notification"}]}]
+    "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "/path/to/parallax claudecode hook pre-tool-use"}]}],
+    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "/path/to/parallax claudecode hook post-tool-use"}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "/path/to/parallax claudecode hook notification"}]}]
   }
 }
 ```
