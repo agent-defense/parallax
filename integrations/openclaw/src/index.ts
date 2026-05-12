@@ -13,7 +13,20 @@
  *   PARALLAX_URL      — evaluation endpoint (default: http://127.0.0.1:9920/evaluate)
  *   PARALLAX_TIMEOUT  — request timeout in ms (default: 3000)
  */
+/*
+* # Додати одну змінну
+openclaw config set env.PARALLAX_URL "http://127.0.0.1:47549/ai_defender/evaluate"
 
+# Або через вкладений об'єкт vars (теж працює)
+openclaw config set env.vars.MY_WEBHOOK_URL "ws://localhost:8765"
+
+# Додати кілька змінних одразу (batch)
+openclaw config set env '{
+  "LOG_LEVEL": "debug",
+  "MY_PLUGIN_DEBUG": "true",
+  "LOG_SOCKET_URL": "ws://127.0.0.1:9000"
+}'
+* */
 const DEFAULT_URL = "http://127.0.0.1:9920/evaluate";
 
 interface Verdict {

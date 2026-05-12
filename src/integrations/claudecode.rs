@@ -2,34 +2,38 @@ use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
-const SETTINGS_PATH: &str = ".claude/settings.json";
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 9920;
 
-/// Install Parallax hook scripts into the Claude Code project settings.
+fn global_settings_path() -> PathBuf {
+    std::env::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".claude")
+        .join("settings.json")
+}
+
+/// Install Parallax hook commands into the global Claude Code settings (~/.claude/settings.json).
 pub fn setup(host: &str, port: u16) {
-    let install_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let scripts_dir = install_dir
-        .join("integrations")
-        .join("claudecode")
-        .join("src");
+    let settings_path = global_settings_path();
 
     println!("Installing Claude Code hooks");
     println!();
 
-    let make_cmd = |script: &str| -> String {
-        let path = scripts_dir.join(script).display().to_string();
+    let exe = std::env::current_exe()
+        .unwrap_or_else(|_| PathBuf::from("parallax"))
+        .display()
+        .to_string();
+
+    let make_cmd = |event: &str| -> String {
         if host != DEFAULT_HOST || port != DEFAULT_PORT {
             format!(
-                "PARALLAX_URL=http://{}:{}/evaluate tsx {}",
-                host, port, path
+                "PARALLAX_URL=http://{}:{}/evaluate {} claudecode hook {}",
+                host, port, exe, event
             )
         } else {
-            format!("tsx {}", path)
+            format!("{} claudecode hook {}", exe, event)
         }
     };
-
-    let settings_path = PathBuf::from(SETTINGS_PATH);
 
     let mut settings: Value = if settings_path.exists() {
         std::fs::read_to_string(&settings_path)
@@ -51,7 +55,7 @@ pub fn setup(host: &str, port: u16) {
         "PreToolUse",
         json!({
             "matcher": ".*",
-            "hooks": [{"type": "command", "command": make_cmd("pre_tool_use.ts")}]
+            "hooks": [{"type": "command", "command": make_cmd("pre-tool-use")}]
         }),
     );
     merge_hook(
@@ -59,19 +63,19 @@ pub fn setup(host: &str, port: u16) {
         "PostToolUse",
         json!({
             "matcher": ".*",
-            "hooks": [{"type": "command", "command": make_cmd("post_tool_use.ts")}]
+            "hooks": [{"type": "command", "command": make_cmd("post-tool-use")}]
         }),
     );
     merge_hook(
         hooks,
         "Notification",
         json!({
-            "hooks": [{"type": "command", "command": make_cmd("notification.ts")}]
+            "hooks": [{"type": "command", "command": make_cmd("notification")}]
         }),
     );
 
     if let Some(parent) = settings_path.parent() {
-        if !parent.as_os_str().is_empty() && !parent.exists() {
+        if !parent.exists() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 eprintln!("  ERROR: Could not create {}: {}", parent.display(), e);
                 std::process::exit(1);
@@ -88,34 +92,29 @@ pub fn setup(host: &str, port: u16) {
     };
 
     if let Err(e) = std::fs::write(&settings_path, format!("{}\n", json_str)) {
-        eprintln!("  ERROR: Failed to write {}: {}", SETTINGS_PATH, e);
+        eprintln!("  ERROR: Failed to write {}: {}", settings_path.display(), e);
         std::process::exit(1);
     }
 
-    println!("Done. Parallax hooks written to {}", SETTINGS_PATH);
-    println!();
-    println!("  Scripts: {}", scripts_dir.display());
-    println!("  Config:  {}", settings_path.display());
-    println!();
-    println!("For user-level hooks (all projects) copy to ~/.claude/settings.json.");
+    println!("Done. Parallax hooks written to {}", settings_path.display());
     println!();
     println!("Start the evaluation server with:");
     println!("  parallax serve -c config.yaml");
 }
 
-/// Remove Parallax hook entries from the Claude Code project settings.
+/// Remove Parallax hook entries from the global Claude Code settings (~/.claude/settings.json).
 pub fn revert() {
-    let settings_path = PathBuf::from(SETTINGS_PATH);
+    let settings_path = global_settings_path();
 
     if !settings_path.exists() {
-        println!("No Claude Code settings found at {}", SETTINGS_PATH);
+        println!("No Claude Code settings found at {}", settings_path.display());
         return;
     }
 
     let content = match std::fs::read_to_string(&settings_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("  ERROR: Failed to read {}: {}", SETTINGS_PATH, e);
+            eprintln!("  ERROR: Failed to read {}: {}", settings_path.display(), e);
             std::process::exit(1);
         }
     };
@@ -123,13 +122,13 @@ pub fn revert() {
     let mut settings: Value = match serde_json::from_str(&content) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("  ERROR: Failed to parse {}: {}", SETTINGS_PATH, e);
+            eprintln!("  ERROR: Failed to parse {}: {}", settings_path.display(), e);
             std::process::exit(1);
         }
     };
 
     if !remove_parallax_hooks(&mut settings) {
-        println!("No Parallax hooks found in {}", SETTINGS_PATH);
+        println!("No Parallax hooks found in {}", settings_path.display());
         return;
     }
 
@@ -142,11 +141,11 @@ pub fn revert() {
     };
 
     if let Err(e) = std::fs::write(&settings_path, format!("{}\n", json_str)) {
-        eprintln!("  ERROR: Failed to write {}: {}", SETTINGS_PATH, e);
+        eprintln!("  ERROR: Failed to write {}: {}", settings_path.display(), e);
         std::process::exit(1);
     }
 
-    println!("Done. Parallax hooks removed from {}", SETTINGS_PATH);
+    println!("Done. Parallax hooks removed from {}", settings_path.display());
 }
 
 /// Replace or append our entry for the given hook type, evicting stale Parallax entries first.
@@ -190,7 +189,7 @@ fn remove_parallax_hooks(settings: &mut Value) -> bool {
     removed
 }
 
-/// Returns true if any inner hook command points at a claudecode integration script.
+/// Returns true if any inner hook command is a Parallax claudecode hook entry.
 fn is_parallax_entry(entry: &Value) -> bool {
     entry
         .get("hooks")
@@ -199,7 +198,10 @@ fn is_parallax_entry(entry: &Value) -> bool {
             hooks.iter().any(|h| {
                 h.get("command")
                     .and_then(|c| c.as_str())
-                    .map(|c| c.contains("claudecode/src/"))
+                    .map(|c| {
+                        c.contains("parallax claudecode hook")
+                            || c.contains("claudecode/src/")
+                    })
                     .unwrap_or(false)
             })
         })

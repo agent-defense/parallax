@@ -1,0 +1,19 @@
+[package]
+name = "parallax-hooks"
+version = "0.2.0"
+edition = "2021"
+description = "Claude Code lifecycle hook binary for Parallax security integration"
+
+[lib]
+name = "parallax_hooks"
+path = "src/lib.rs"
+
+[[bin]]
+name = "parallax-hooks"
+path = "src/main.rs"
+
+[dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util"] }

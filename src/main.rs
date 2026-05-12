@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
+use tokio::io::AsyncReadExt;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
@@ -57,6 +58,33 @@ enum Commands {
         #[command(subcommand)]
         framework: RevertFramework,
     },
+
+    /// Claude Code lifecycle hook integration
+    Claudecode {
+        #[command(subcommand)]
+        command: ClaudecodeCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ClaudecodeCommands {
+    /// Execute a Claude Code lifecycle hook (reads event JSON from stdin)
+    Hook {
+        #[command(subcommand)]
+        event: HookEvent,
+    },
+}
+
+#[derive(Subcommand)]
+enum HookEvent {
+    /// Pre-tool-use hook — evaluates before a tool runs; exits 2 to block
+    #[command(name = "pre-tool-use")]
+    PreToolUse,
+    /// Post-tool-use hook — evaluates after a tool runs (fire-and-forget)
+    #[command(name = "post-tool-use")]
+    PostToolUse,
+    /// Notification hook — evaluates agent notifications (fire-and-forget)
+    Notification,
 }
 
 #[derive(Subcommand)]
@@ -227,5 +255,43 @@ async fn main() {
                 RevertFramework::Claudecode => parallax::integrations::claudecode::revert(),
             }
         }
+
+        Commands::Claudecode { command } => {
+            let ClaudecodeCommands::Hook { event } = command;
+            let hook = read_stdin_json().await;
+            match event {
+                HookEvent::PreToolUse => {
+                    let verdict = parallax_hooks::pre_tool_use(&hook).await;
+                    if verdict.blocked {
+                        print!(
+                            "{}",
+                            serde_json::json!({
+                                "decision": "block",
+                                "reason": verdict.reasons.join("; "),
+                            })
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                HookEvent::PostToolUse => {
+                    parallax_hooks::post_tool_use(&hook).await;
+                }
+                HookEvent::Notification => {
+                    parallax_hooks::notification(&hook).await;
+                }
+            }
+        }
     }
+}
+
+async fn read_stdin_json() -> serde_json::Value {
+    let mut input = String::new();
+    if tokio::io::stdin()
+        .read_to_string(&mut input)
+        .await
+        .is_err()
+    {
+        std::process::exit(0);
+    }
+    serde_json::from_str(&input).unwrap_or_else(|_| std::process::exit(0))
 }

@@ -10,6 +10,8 @@ keywords = ["security", "ai", "evaluation", "agent", "policy"]
 categories = ["security", "command-line-utilities", "artificial-intelligence"]
 
 [dependencies]
+parallax-hooks = { path = "integrations/claudecode" }
+
 async-trait = "0.1"
 async-stream = "0.3"
 axum = { version = "0.7", features = ["json"] }
