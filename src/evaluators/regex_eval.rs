@@ -21,6 +21,7 @@ struct RegexRule {
     title: String,
     description: String,
     action: Action,
+    priority: String,
     fields: Option<Vec<String>>,
     patterns: Vec<PatternEntry>,
     match_mode: MatchMode,
@@ -63,6 +64,11 @@ impl RegexRule {
                 Action::Block
             }
         };
+        let priority = map
+            .get(serde_yaml::Value::String("priority".into()))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
         let fields = map
             .get(serde_yaml::Value::String("fields".into()))
@@ -161,6 +167,7 @@ impl RegexRule {
             title,
             description,
             action,
+            priority,
             fields,
             patterns,
             match_mode,
@@ -317,6 +324,7 @@ impl Evaluator for RegexEvaluator {
                             ("title".to_string(), serde_json::json!(rule.title)),
                             ("description".to_string(), serde_json::json!(rule.description)),
                             ("match".to_string(), serde_json::json!(match_preview)),
+                            ("priority".to_string(), serde_json::json!(rule.priority)),
                         ]
                         .into_iter()
                         .collect(),

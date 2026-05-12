@@ -105,6 +105,8 @@ async fn evaluate(
 
     let t0 = Instant::now();
     let result = state.chain.run(&ctx).await;
+    println!("{:?}, {}", ctx, serde_json::json!(result));
+
     let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
     // Side effects: audit log and webhook

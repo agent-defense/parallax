@@ -40,7 +40,7 @@ async function evaluate(event: Record<string, unknown>): Promise<Verdict> {
   const timeout = parseInt(process.env.PARALLAX_TIMEOUT || "3000", 10);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
-
+  event.src = "OpenClaw";
   try {
     const resp = await fetch(url, {
       method: "POST",
