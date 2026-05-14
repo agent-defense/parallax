@@ -17,7 +17,7 @@ pub struct Verdict {
 /// Exit code logic (2 = block) is left to the caller.
 pub async fn pre_tool_use(hook: &Value) -> Verdict {
     evaluate(json!({
-        "stage":      "tool.before",
+        "stage": "tool.before",
         "session_id": str_field(hook, "session_id"),
         "tool_name":  str_field(hook, "tool_name"),
         "tool_args":  hook.get("tool_input").cloned().unwrap_or_default(),
