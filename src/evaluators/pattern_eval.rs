@@ -13,6 +13,7 @@ struct PatternRule {
     title: String,
     description: String,
     action: Action,
+    priority: String,
     keywords: Vec<String>,
     case_sensitive: bool,
 }
@@ -90,6 +91,11 @@ impl PatternEvaluator {
                             .get(serde_yaml::Value::String("case_sensitive".into()))
                             .and_then(|v| v.as_bool())
                             .unwrap_or(false);
+                        let priority = m
+                            .get(serde_yaml::Value::String("priority".into()))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
 
                         if keywords.is_empty() {
                             warn!(id, "No keywords in pattern rule, skipping");
@@ -101,6 +107,7 @@ impl PatternEvaluator {
                             title,
                             description,
                             action,
+                            priority,
                             keywords,
                             case_sensitive,
                         })
@@ -155,6 +162,7 @@ impl Evaluator for PatternEvaluator {
                             ("title".to_string(), serde_json::json!(rule.title)),
                             ("description".to_string(), serde_json::json!(rule.description)),
                             ("keyword".to_string(), serde_json::json!(keyword)),
+                            ("priority".to_string(), serde_json::json!(rule.priority)),
                         ]
                         .into_iter()
                         .collect(),

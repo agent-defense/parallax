@@ -38,6 +38,7 @@ struct SQLRule {
     condition: String,
     action: Action,
     reason: String,
+    priority: String,
 }
 
 /// SQL evaluator — stateful detection using in-memory SQLite.
@@ -138,6 +139,11 @@ impl SQLEvaluator {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
+                let priority = m
+                    .get(serde_yaml::Value::String("priority".into()))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
                 rules.push(SQLRule {
                     id,
@@ -147,6 +153,7 @@ impl SQLEvaluator {
                     condition,
                     action,
                     reason,
+                    priority,
                 });
             }
         }
@@ -316,6 +323,7 @@ impl Evaluator for SQLEvaluator {
                                         ("id".to_string(), serde_json::json!(rule.id)),
                                         ("title".to_string(), serde_json::json!(rule.title)),
                                         ("description".to_string(), serde_json::json!(rule.description)),
+                                        ("priority".to_string(), serde_json::json!(rule.priority)),
                                     ]
                                     .into_iter()
                                     .collect(),

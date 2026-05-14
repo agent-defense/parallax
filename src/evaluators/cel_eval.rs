@@ -373,6 +373,7 @@ struct CELRule {
     expr: Expr,
     action: Action,
     reason: String,
+    priority: String,
 }
 
 /// CEL evaluator — Common Expression Language policy rules.
@@ -455,6 +456,11 @@ impl CELEvaluator {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
+                let priority = m
+                    .get(serde_yaml::Value::String("priority".into()))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
                 match parse_cel(expr_str) {
                     Some(expr) => rules.push(CELRule {
@@ -464,6 +470,7 @@ impl CELEvaluator {
                         expr,
                         action,
                         reason,
+                        priority,
                     }),
                     None => {
                         warn!(id, expr = expr_str, "Failed to parse CEL expression");
@@ -518,6 +525,7 @@ impl Evaluator for CELEvaluator {
                             ("id".to_string(), serde_json::json!(rule.id)),
                             ("title".to_string(), serde_json::json!(rule.title)),
                             ("description".to_string(), serde_json::json!(rule.description)),
+                            ("priority".to_string(), serde_json::json!(rule.priority)),
                         ]
                         .into_iter()
                         .collect(),

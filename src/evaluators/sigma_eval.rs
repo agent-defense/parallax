@@ -264,6 +264,7 @@ struct SigmaRule {
     title: String,
     description: String,
     action: Action,
+    priority: String,
     matcher: SigmaConditionMatcher,
 }
 
@@ -294,6 +295,11 @@ impl SigmaRule {
             "allow" => Action::Allow,
             _ => Action::Detect,
         };
+        let priority = raw
+            .get(serde_yaml::Value::String("priority".into()))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let detection = raw
             .get(serde_yaml::Value::String("detection".into()))?
             .as_mapping()?;
@@ -303,6 +309,7 @@ impl SigmaRule {
             title,
             description,
             action,
+            priority,
             matcher: SigmaConditionMatcher::new(detection),
         })
     }
@@ -452,6 +459,7 @@ impl Evaluator for SigmaEvaluator {
                         ("id".to_string(), serde_json::json!(rule.id)),
                         ("title".to_string(), serde_json::json!(rule.title)),
                         ("description".to_string(), serde_json::json!(rule.description)),
+                        ("priority".to_string(), serde_json::json!(rule.priority)),
                     ]
                     .into_iter()
                     .collect(),
