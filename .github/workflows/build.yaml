@@ -57,6 +57,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+          cache-on-failure: false
+
+      - name: Verify cargo installation
+        run: |
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          cargo --version
+          rustc --version
 
       - name: Install build dependencies (Linux)
         if: runner.os == 'Linux'
