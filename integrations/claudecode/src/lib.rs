@@ -5,7 +5,6 @@ use serde_json::{json, Value};
 
 const DEFAULT_URL: &str = "http://127.0.0.1:9920/evaluate";
 const DEFAULT_TIMEOUT_MS: u64 = 3000;
-const SRC_NAME: &str = "ClaudeCode";
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Verdict {
@@ -18,7 +17,6 @@ pub struct Verdict {
 /// Exit code logic (2 = block) is left to the caller.
 pub async fn pre_tool_use(hook: &Value) -> Verdict {
     evaluate(json!({
-        "src":        SRC_NAME,
         "stage":      "tool.before",
         "session_id": str_field(hook, "session_id"),
         "tool_name":  str_field(hook, "tool_name"),
@@ -38,7 +36,6 @@ pub async fn post_tool_use(hook: &Value) -> Verdict {
     };
 
     evaluate(json!({
-        "src":         SRC_NAME,
         "stage":       "tool.after",
         "session_id":  str_field(hook, "session_id"),
         "tool_name":   str_field(hook, "tool_name"),
@@ -52,7 +49,6 @@ pub async fn post_tool_use(hook: &Value) -> Verdict {
 /// Evaluate a `Notification` hook event. Fire-and-forget — verdict is informational.
 pub async fn notification(hook: &Value) -> Verdict {
     evaluate(json!({
-        "src": SRC_NAME,
         "stage":        "message.before",
         "session_id":   str_field(hook, "session_id"),
         "message_text": str_field(hook, "message"),
