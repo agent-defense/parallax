@@ -1,0 +1,22 @@
+name: Notify Slack
+
+on:
+  pull_request:
+    types: [opened, reopened]
+  release:
+    types: [published]
+
+jobs:
+  notify-slack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack notification on PR open or release
+        uses: slackapi/slack-github-action@v3.0.3
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: |
+              🚀 *${{ github.event_name }}* by _${{ github.actor }}_ in `${{ github.repository }}`
+              ${{ github.event.pull_request.title || github.event.release.name }}
+              <${{ github.event.pull_request.html_url || github.event.release.html_url }}|View on GitHub>
