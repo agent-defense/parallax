@@ -2,7 +2,7 @@ name: Notify Slack
 
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, closed]
   release:
     types: [published]
 
@@ -19,4 +19,5 @@ jobs:
             text: |
               🚀 *${{ github.event_name }}* by _${{ github.actor }}_ in `${{ github.repository }}`
               ${{ github.event.pull_request.title || github.event.release.name }}
+              ${{ github.event.pull_request.merged && '✅ merged' || github.event.action == 'closed' && '🛑 closed' || '' }}
               <${{ github.event.pull_request.html_url || github.event.release.html_url }}|View on GitHub>
