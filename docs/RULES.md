@@ -122,7 +122,7 @@ Blocks dangerous shell commands before they execute. Covered by multiple engines
 |----|-------|-------------|--------|
 | cel-pol-001 | Block recursive file deletion | Prevents recursive file deletion via rm -r commands | Block |
 | cel-pol-002 | Block world-writable permissions | Prevents setting chmod 777 which makes files world-writable | Block |
-| cel-pol-003 | Warn on sudo usage | Detects elevated privilege execution via sudo | Detect |
+| cel-pol-003 | Detect sudo usage | Detects elevated privilege execution via sudo | Detect |
 | cel-pol-004 | Block environment variable dump | Detects environment variable dumps that may expose secrets | Detect |
 
 ---
