@@ -1,10 +1,24 @@
-# Parallax
+<div align="center">
 
-Runtime security engine that protects AI agents from prompt injection, data exfiltration, and dangerous tool calls -- any framework, any LLM.
+# 🛡️ Parallax 🛡️
 
-One binary, one YAML config. Evaluates every agent event in microseconds.
+### Runtime security for AI agents — block prompt injection, data exfiltration, and dangerous tool calls
 
-## Why Parallax
+**One binary · One YAML · Microsecond decisions · Any framework, any LLM**
+
+[![CI](https://github.com/agent-defense/parallax/actions/workflows/ci.yml/badge.svg)](https://github.com/agent-defense/parallax/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Rust 1.70+](https://img.shields.io/badge/rust-1.70%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
+[![Release](https://img.shields.io/github/v/release/agent-defense/parallax?color=brightgreen)](https://github.com/agent-defense/parallax/releases)
+[![Stars](https://img.shields.io/github/stars/agent-defense/parallax?style=social)](https://github.com/agent-defense/parallax/stargazers)
+
+[**Quick Start**](#-quick-start) · [**Docs**](docs/) · [**Architecture**](docs/ARCHITECTURE.md) · [**Rules**](docs/RULES.md) · [**Roadmap**](#-roadmap)
+
+</div>
+
+---
+
+## 🛡️ Why Parallax
 
 - **Single binary, zero runtime dependencies** -- `cargo build --release` produces one static executable. No Python, no JVM, no containers required.
 - **Microsecond evaluation** -- the evaluator chain runs in cost order and short-circuits on the first `block`. Typical decisions complete in under 0.2 ms.
@@ -12,7 +26,7 @@ One binary, one YAML config. Evaluates every agent event in microseconds.
 - **51 rules out of the box** -- ships with rules covering 13 threat categories: prompt injection, reconnaissance, privilege escalation, PII leakage, supply chain attacks, data exfiltration, and more.
 - **Five evaluator engines** -- regex, keyword pattern, Sigma, CEL expressions, and SQL-based temporal analysis. Mix and match for layered defense.
 
-## How It Works
+## ⚙️ How It Works
 
 ```
   Agent Event ──> Parallax ──> Decision (block / redact / allow)
@@ -23,7 +37,7 @@ One binary, one YAML config. Evaluates every agent event in microseconds.
 
 Every event passes through a chain of evaluators. Each evaluator checks the event against its rules and returns a verdict. The chain short-circuits on the first `block` -- no wasted work.
 
-## Quick Start
+## 🚀 Quick Start
 
 ### 1. Get the binary
 
@@ -70,7 +84,7 @@ Your agent calls `POST /evaluate` before and after each tool execution and acts 
 
 Use `parallax setup <framework>` and `parallax revert <framework>` for framework-specific configuration. OpenClaw supports proxy and server modes; Claude Code uses lifecycle hooks. See [Agent Framework Integrations](#agent-framework-integrations) for the commands and links to the detailed setup guides.
 
-## Supported Threat Categories
+## 🎯 Supported Threat Categories
 
 | Category | Evaluator | Coverage |
 |----------|-----------|----------|
@@ -90,7 +104,7 @@ Use `parallax setup <framework>` and `parallax revert <framework>` for framework
 
 See [docs/RULES.md](docs/RULES.md) for the full reference.
 
-## Configuration
+## 📝 Configuration
 
 One YAML file, three sections:
 
@@ -171,7 +185,7 @@ Evaluators run in cost order (cheapest first) and short-circuit on block.
 | `tool.after` | After tool execution | Yes |
 | `params.before` | Before model parameter forwarding | Yes |
 
-## Two Modes
+## 🌐 Two Modes
 
 ### Server Mode (default)
 
@@ -223,7 +237,7 @@ The proxy:
 - Replaces blocked tool calls with text explanations
 - Passes through non-messages endpoints transparently
 
-## Agent Framework Integrations
+## 🔌 Agent Framework Integrations
 
 ### Any agent system (HTTP API)
 
@@ -283,7 +297,7 @@ parallax revert claudecode
 
 Supported frameworks: `openclaw`, `claudecode` (more coming in v0.3).
 
-## Roadmap
+## 🗺️ Roadmap
 
 ### v0.3 -- Multi-Framework & Multi-Provider Support
 - Generic `parallax setup <name>` for LangChain, CrewAI, OpenAI Agents SDK
@@ -309,7 +323,7 @@ Supported frameworks: `openclaw`, `claudecode` (more coming in v0.3).
 - Webhook integrations -- Slack, PagerDuty, and SIEM connectors
 - Dashboard UI for rule management and audit log visualization
 
-## Architecture
+## 🏗️ Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details on the evaluator chain, short-circuit logic, and cost-ordered execution.
 
@@ -322,6 +336,14 @@ cargo build --release  # Optimized release build
 RUST_LOG=debug cargo run -- serve -c config.yaml
 ```
 
-## License
+## 📄 License
 
 Apache 2.0
+
+---
+
+<div align="center">
+
+Made with 🦀 in Rust · [Report a bug](https://github.com/agent-defense/parallax/issues) · [Request a feature](https://github.com/agent-defense/parallax/issues/new)
+
+</div>
