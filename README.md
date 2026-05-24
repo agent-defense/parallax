@@ -27,15 +27,7 @@
 
 ## ⚙️ How It Works
 
-```mermaid
-flowchart LR
-    A([Agent event]):::io ==> B[regex → pattern → sigma → cel → sql]:::chain
-    B ==> C{{allow · detect · redact · block}}:::chain
-    C ==> D([Audit log · Webhook]):::io
-
-    classDef io fill:#2d333b,stroke:#444c56,color:#cdd9e5,stroke-width:1px
-    classDef chain fill:#21262d,stroke:#30363d,color:#c9d1d9
-```
+![How Parallax processes an event: agent event flows through the evaluator chain (regex, pattern, sigma, cel, sql) to a decision (allow, detect, redact, block) and finally to the audit log and webhook.](docs/assets/how-it-works.svg)
 
 Each event carries a lifecycle stage (`message.before`, `tool.before`, `tool.after`, `params.before`). Evaluators run cheapest-first and short-circuit on the first `block`; otherwise results are aggregated by severity (`block` > `redact` > `detect` > `allow`).
 
