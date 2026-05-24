@@ -28,13 +28,25 @@
 ## ⚙️ How It Works
 
 ```
-  Agent Event ──> Parallax ──> Decision (block / redact / allow)
-                     │
-                     ├── Audit Log (JSONL)
-                     └── Webhook (SIEM, Slack, PagerDuty)
+  Agent ──► POST /evaluate  { stage, tool_name, tool_args, message_text, ... }
+                                       │
+                                       ▼
+            ┌──────────────────────────────────────────────────┐
+            │              Evaluator chain                     │
+            │  regex → pattern → sigma → cel → sql             │
+            │   ◄──── cheap ─────────────► expensive ────►     │
+            │                                                  │
+            │  Per-stage filter · short-circuits on  block     │
+            └──────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+              Decision:  allow │ detect │ redact │ block
+                                       │
+                                       ├──► Audit log  (append-only JSONL)
+                                       └──► Webhook    (SIEM / Slack / PagerDuty)
 ```
 
-Every event passes through a chain of evaluators. Each evaluator checks the event against its rules and returns a verdict. The chain short-circuits on the first `block` -- no wasted work.
+Each event carries a **lifecycle stage** (`message.before`, `tool.before`, `tool.after`, `params.before`). Evaluators run in cost order — cheap regex matches first, expensive SQL last — and only on the stages they're configured for. The chain short-circuits the moment one returns `block`; otherwise results are aggregated by severity (`block` > `redact` > `detect` > `allow`). Server mode appends the decision to a JSONL audit log and POSTs to a webhook (filtered by action).
 
 ## 🚀 Quick Start
 
