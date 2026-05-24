@@ -27,26 +27,17 @@
 
 ## ⚙️ How It Works
 
-```
-  Agent ──► POST /evaluate  { stage, tool_name, tool_args, message_text, ... }
-                                       │
-                                       ▼
-            ┌──────────────────────────────────────────────────┐
-            │              Evaluator chain                     │
-            │  regex → pattern → sigma → cel → sql             │
-            │   ◄──── cheap ─────────────► expensive ────►     │
-            │                                                  │
-            │  Per-stage filter · short-circuits on  block     │
-            └──────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-              Decision:  allow │ detect │ redact │ block
-                                       │
-                                       ├──► Audit log  (append-only JSONL)
-                                       └──► Webhook    (SIEM / Slack / PagerDuty)
+```mermaid
+flowchart LR
+    A([Agent event]):::io ==> B[regex → pattern → sigma → cel → sql]:::chain
+    B ==> C{{allow · detect · redact · block}}:::chain
+    C ==> D([Audit log · Webhook]):::io
+
+    classDef io fill:#2d333b,stroke:#444c56,color:#cdd9e5,stroke-width:1px
+    classDef chain fill:#21262d,stroke:#30363d,color:#c9d1d9
 ```
 
-Each event carries a **lifecycle stage** (`message.before`, `tool.before`, `tool.after`, `params.before`). Evaluators run in cost order — cheap regex matches first, expensive SQL last — and only on the stages they're configured for. The chain short-circuits the moment one returns `block`; otherwise results are aggregated by severity (`block` > `redact` > `detect` > `allow`). Server mode appends the decision to a JSONL audit log and POSTs to a webhook (filtered by action).
+Each event carries a lifecycle stage (`message.before`, `tool.before`, `tool.after`, `params.before`). Evaluators run cheapest-first and short-circuit on the first `block`; otherwise results are aggregated by severity (`block` > `redact` > `detect` > `allow`).
 
 ## 🚀 Quick Start
 
