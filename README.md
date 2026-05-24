@@ -6,7 +6,6 @@
 
 **One binary · One YAML · Microsecond decisions · Any framework, any LLM**
 
-[![CI](https://github.com/agent-defense/parallax/actions/workflows/ci.yml/badge.svg)](https://github.com/agent-defense/parallax/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Rust 1.70+](https://img.shields.io/badge/rust-1.70%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
 [![Release](https://img.shields.io/github/v/release/agent-defense/parallax?color=brightgreen)](https://github.com/agent-defense/parallax/releases)
