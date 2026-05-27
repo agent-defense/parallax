@@ -343,14 +343,7 @@ async fn main() {
                     let hook = read_event_json(payload).await;
                     let verdict = parallax_codex_hooks::pre_tool_use(&hook).await;
                     if verdict.blocked {
-                        print!(
-                            "{}",
-                            serde_json::json!({
-                                "decision": "block",
-                                "reason": verdict.reasons.join("; "),
-                            })
-                        );
-                        std::process::exit(2);
+                        print!("{}", parallax_codex_hooks::deny_output(&verdict));
                     }
                 }
                 CodexHookEvent::PostToolUse { payload } => {

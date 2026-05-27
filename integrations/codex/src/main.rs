@@ -3,8 +3,8 @@
  *
  * Thin CLI wrapper around the `parallax_codex_hooks` library. Reads the hook
  * event either from a trailing JSON argument (how Codex's `notify` program is
- * invoked) or from stdin, delegates to the library, and exits with code 2
- * (+ block JSON to stdout) when `pre-tool-use` is blocked.
+ * invoked) or from stdin, delegates to the library, and on a blocked
+ * `pre-tool-use` prints Codex's deny JSON to stdout (exit `0`).
  *
  * Usage:
  *   parallax-codex-hooks notification [json]   — Codex notify (fire-and-forget)
@@ -16,7 +16,7 @@
  *   PARALLAX_TIMEOUT — request timeout in ms (default: 3000)
  */
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use tokio::io::AsyncReadExt;
 
 #[tokio::main]
@@ -40,14 +40,7 @@ async fn main() {
         "pre-tool-use" => {
             let verdict = parallax_codex_hooks::pre_tool_use(&hook).await;
             if verdict.blocked {
-                print!(
-                    "{}",
-                    json!({
-                        "decision": "block",
-                        "reason": verdict.reasons.join("; "),
-                    })
-                );
-                std::process::exit(2);
+                print!("{}", parallax_codex_hooks::deny_output(&verdict));
             }
         }
         "post-tool-use" => {

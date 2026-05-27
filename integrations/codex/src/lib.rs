@@ -13,8 +13,25 @@ pub struct Verdict {
     pub reasons: Vec<String>,
 }
 
+/// Build the stdout JSON that tells Codex to deny a tool call.
+///
+/// Codex denies a `PreToolUse` tool call when the hook prints this object to
+/// stdout and exits `0`. We use the structured `hookSpecificOutput` form rather
+/// than exiting `2` (the stderr-only alternative): a non-zero exit with JSON on
+/// stdout is treated as a hook error and the call is allowed through.
+pub fn deny_output(verdict: &Verdict) -> String {
+    json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": verdict.reasons.join("; "),
+        }
+    })
+    .to_string()
+}
+
 /// Evaluate a tool-before event. Returns the Parallax verdict.
-/// Exit code logic (2 = block) is left to the caller.
+/// Blocking is signalled by the caller via [`deny_output`] on stdout + exit `0`.
 pub async fn pre_tool_use(hook: &Value) -> Verdict {
     evaluate(json!({
         "stage":      "tool.before",
@@ -162,5 +179,19 @@ mod tests {
     fn session_falls_back_to_session_id() {
         let event = json!({ "session_id": "s-1" });
         assert_eq!(codex_session(&event), "s-1");
+    }
+
+    #[test]
+    fn deny_output_uses_codex_permission_decision() {
+        let verdict = Verdict {
+            action: "block".to_string(),
+            blocked: true,
+            reasons: vec!["dangerous-commands".to_string(), "rm -rf".to_string()],
+        };
+        let parsed: Value = serde_json::from_str(&deny_output(&verdict)).unwrap();
+        let out = &parsed["hookSpecificOutput"];
+        assert_eq!(out["hookEventName"], "PreToolUse");
+        assert_eq!(out["permissionDecision"], "deny");
+        assert_eq!(out["permissionDecisionReason"], "dangerous-commands; rm -rf");
     }
 }

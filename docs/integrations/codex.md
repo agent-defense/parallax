@@ -62,10 +62,22 @@ The setup wires all three hooks:
 | Hook | Command | Stage | Behavior |
 |------|---------|-------|----------|
 | `notification` | `parallax codex hook notification` | `message.before` | Fire-and-forget — Codex's `notify` cannot block a turn |
-| `pre-tool-use` | `parallax codex hook pre-tool-use` | `tool.before` | Blocks the tool call if the verdict is `block` (exits `2`) |
+| `pre-tool-use` | `parallax codex hook pre-tool-use` | `tool.before` | Denies the tool call if the verdict is `block` |
 | `post-tool-use` | `parallax codex hook post-tool-use` | `tool.after` | Fire-and-forget — logs but doesn't block |
 
-The `PreToolUse` hook reads the Codex event from stdin (`tool_name`, `tool_input`, `session_id`, `turn_id`) and blocks the call on a `block` verdict by exiting `2`. The standalone binary supports the same commands for wrappers that feed tool events manually.
+The `PreToolUse` hook reads the Codex event from stdin (`tool_name`, `tool_input`, `session_id`, `turn_id`). On a `block` verdict it prints Codex's deny decision to stdout and exits `0`:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "<rule reasons>"
+  }
+}
+```
+
+Codex treats a non-zero exit with stdout output as a hook *error* and lets the call through, so the deny must be delivered as stdout JSON with exit `0` (not via exit `2`). The standalone binary supports the same commands for wrappers that feed tool events manually.
 
 A Codex notify payload is mapped as follows:
 
