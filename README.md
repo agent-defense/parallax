@@ -258,7 +258,7 @@ Parallax includes a dedicated integration for [Claude Code](https://claude.ai/co
 
 ### Codex CLI
 
-Parallax includes a dedicated integration for [Codex CLI](https://github.com/openai/codex). It writes a `notify` hook into `~/.codex/config.toml` that forwards agent events to the Parallax evaluation server. See [docs/integrations/codex.md](docs/integrations/codex.md) for full setup instructions.
+Parallax includes a dedicated integration for [Codex CLI](https://github.com/openai/codex). It writes `notify`, `PreToolUse`, and `PostToolUse` hooks into `~/.codex/config.toml` that forward agent events to the Parallax evaluation server — `PreToolUse` can block a tool call before it runs. See [docs/integrations/codex.md](docs/integrations/codex.md) for full setup instructions.
 
 ## CLI Reference
 
@@ -273,7 +273,7 @@ parallax serve [OPTIONS]
 parallax setup <COMMAND>
   openclaw   Configure OpenClaw to route through Parallax
   claudecode Configure Claude Code hooks to route through Parallax
-  codex      Configure Codex CLI notify hook to route through Parallax
+  codex      Configure Codex CLI hooks to route through Parallax
 
 parallax setup openclaw [OPTIONS]
       --host <HOST>         Proxy host [default: 127.0.0.1]
@@ -291,7 +291,7 @@ parallax setup codex [OPTIONS]
 parallax revert <COMMAND>
   openclaw   Revert OpenClaw to use Anthropic directly
   claudecode Revert Claude Code hooks
-  codex      Revert Codex CLI notify hook
+  codex      Revert Codex CLI hooks
 
 parallax revert openclaw [OPTIONS]
       --model <MODEL>       Model ID [default: claude-sonnet-4-20250514]

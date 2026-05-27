@@ -151,7 +151,7 @@ enum SetupFramework {
         port: u16,
     },
 
-    /// Configure Codex CLI notify hook to route through Parallax
+    /// Configure Codex CLI hooks to route through Parallax
     Codex {
         /// Proxy host
         #[arg(long, default_value = "127.0.0.1")]
@@ -175,7 +175,7 @@ enum RevertFramework {
     /// Revert Claude Code hooks
     Claudecode,
 
-    /// Revert Codex CLI notify hook
+    /// Revert Codex CLI hooks
     Codex,
 }
 

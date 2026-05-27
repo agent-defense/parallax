@@ -1,6 +1,8 @@
 # Codex CLI Integration
 
-Parallax integrates with [Codex CLI](https://github.com/openai/codex) via its `notify` hook. Codex spawns the configured `notify` program when an agent turn completes, passing the event as a JSON argument. The hook forwards the event to the Parallax evaluation server, which applies the configured rule chain.
+Parallax integrates with [Codex CLI](https://github.com/openai/codex) through Codex's hook system. It wires three hooks into `~/.codex/config.toml`: the `notify` program (agent-turn-complete) plus `PreToolUse` and `PostToolUse` lifecycle hooks. Each forwards its event to the Parallax evaluation server, which applies the configured rule chain.
+
+The `PreToolUse` and `PostToolUse` hooks require a Codex version with the hooks engine (stable since Codex CLI v0.124.0).
 
 The integration is a native Rust binary — no Node.js or Python runtime required.
 
@@ -11,19 +13,40 @@ parallax serve -c config.yaml
 parallax setup codex
 ```
 
-`parallax setup codex` writes a `notify` entry into `~/.codex/config.toml` (honoring `CODEX_HOME` if set), making it active for all Codex sessions on this machine.
+`parallax setup codex` writes the hooks into `~/.codex/config.toml` (honoring `CODEX_HOME` if set), making them active for all Codex sessions on this machine.
 
-The generated entry looks like this:
+The generated config looks like this:
 
 ```toml
 notify = ["/path/to/parallax", "codex", "hook", "notification"]
+
+[[hooks.PreToolUse]]
+matcher = ".*"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = '"/path/to/parallax" codex hook pre-tool-use'
+timeout = 30
+statusMessage = "Parallax pre-tool-use check"
+
+[[hooks.PostToolUse]]
+matcher = ".*"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = '"/path/to/parallax" codex hook post-tool-use'
+timeout = 30
+statusMessage = "Parallax post-tool-use review"
 ```
 
-For a non-default host or port, pass `--host` / `--port` to the setup command. Because Codex spawns `notify` directly (not via a shell), the URL is injected through an `env` wrapper:
+Setup is idempotent and preserves any user-defined hooks: re-running it replaces only Parallax's own entries. `parallax revert codex` removes them, dropping empty hook arrays and the `notify` key.
+
+For a non-default host or port, pass `--host` / `--port` to the setup command. Codex spawns `notify` directly (not via a shell), so its URL is injected through an `env` wrapper; the `PreToolUse`/`PostToolUse` commands run through a shell, so their URL is injected as a `PARALLAX_URL=...` prefix:
 
 ```bash
 parallax setup codex --host 0.0.0.0 --port 9999
-# writes: notify = ["env", "PARALLAX_URL=http://0.0.0.0:9999/evaluate", "/path/to/parallax", "codex", "hook", "notification"]
+# notify: ["env", "PARALLAX_URL=http://0.0.0.0:9999/evaluate", "/path/to/parallax", "codex", "hook", "notification"]
+# hook command: PARALLAX_URL=http://0.0.0.0:9999/evaluate "/path/to/parallax" codex hook pre-tool-use
 ```
 
 | Variable | Default | Description |
@@ -34,15 +57,15 @@ parallax setup codex --host 0.0.0.0 --port 9999
 
 ## What the integration evaluates
 
-Codex's `notify` program is **fire-and-forget** — it cannot block a turn. The setup wires the `notification` hook, which forwards Codex notify events (e.g. `agent-turn-complete`) to Parallax:
+The setup wires all three hooks:
 
 | Hook | Command | Stage | Behavior |
 |------|---------|-------|----------|
-| `notification` | `parallax codex hook notification` | `message.before` | Fire-and-forget — logs but doesn't block |
-| `pre-tool-use` | `parallax codex hook pre-tool-use` | `tool.before` | Sequential — blocks if verdict is `block` (exits `2`) |
+| `notification` | `parallax codex hook notification` | `message.before` | Fire-and-forget — Codex's `notify` cannot block a turn |
+| `pre-tool-use` | `parallax codex hook pre-tool-use` | `tool.before` | Blocks the tool call if the verdict is `block` (exits `2`) |
 | `post-tool-use` | `parallax codex hook post-tool-use` | `tool.after` | Fire-and-forget — logs but doesn't block |
 
-The `pre-tool-use` / `post-tool-use` hooks are exposed for the standalone binary and for wrappers that can feed tool events; Codex's native `notify` only drives `notification`.
+The `PreToolUse` hook reads the Codex event from stdin (`tool_name`, `tool_input`, `session_id`, `turn_id`) and blocks the call on a `block` verdict by exiting `2`. The standalone binary supports the same commands for wrappers that feed tool events manually.
 
 A Codex notify payload is mapped as follows:
 
