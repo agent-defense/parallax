@@ -64,6 +64,12 @@ enum Commands {
         #[command(subcommand)]
         command: ClaudecodeCommands,
     },
+
+    /// Codex CLI lifecycle hook integration
+    Codex {
+        #[command(subcommand)]
+        command: CodexCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -85,6 +91,36 @@ enum HookEvent {
     PostToolUse,
     /// Notification hook — evaluates agent notifications (fire-and-forget)
     Notification,
+}
+
+#[derive(Subcommand)]
+enum CodexCommands {
+    /// Execute a Codex lifecycle hook (reads event JSON from a trailing arg or stdin)
+    Hook {
+        #[command(subcommand)]
+        event: CodexHookEvent,
+    },
+}
+
+#[derive(Subcommand)]
+enum CodexHookEvent {
+    /// Pre-tool-use hook — evaluates before a tool runs; exits 2 to block
+    #[command(name = "pre-tool-use")]
+    PreToolUse {
+        /// Event JSON (Codex passes this as a trailing arg); falls back to stdin
+        payload: Option<String>,
+    },
+    /// Post-tool-use hook — evaluates after a tool runs (fire-and-forget)
+    #[command(name = "post-tool-use")]
+    PostToolUse {
+        /// Event JSON (Codex passes this as a trailing arg); falls back to stdin
+        payload: Option<String>,
+    },
+    /// Notification hook — evaluates Codex notify events (fire-and-forget)
+    Notification {
+        /// Event JSON (Codex passes this as a trailing arg); falls back to stdin
+        payload: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -114,6 +150,17 @@ enum SetupFramework {
         #[arg(long, default_value = "9920")]
         port: u16,
     },
+
+    /// Configure Codex CLI notify hook to route through Parallax
+    Codex {
+        /// Proxy host
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Proxy port
+        #[arg(long, default_value = "9920")]
+        port: u16,
+    },
 }
 
 #[derive(Subcommand)]
@@ -127,6 +174,9 @@ enum RevertFramework {
 
     /// Revert Claude Code hooks
     Claudecode,
+
+    /// Revert Codex CLI notify hook
+    Codex,
 }
 
 #[tokio::main]
@@ -244,6 +294,9 @@ async fn main() {
                 SetupFramework::Claudecode { host, port } => {
                     parallax::integrations::claudecode::setup(&host, port)
                 }
+                SetupFramework::Codex { host, port } => {
+                    parallax::integrations::codex::setup(&host, port)
+                }
             }
         }
 
@@ -253,6 +306,7 @@ async fn main() {
                     parallax::integrations::openclaw::revert(&model)
                 }
                 RevertFramework::Claudecode => parallax::integrations::claudecode::revert(),
+                RevertFramework::Codex => parallax::integrations::codex::revert(),
             }
         }
 
@@ -281,7 +335,44 @@ async fn main() {
                 }
             }
         }
+
+        Commands::Codex { command } => {
+            let CodexCommands::Hook { event } = command;
+            match event {
+                CodexHookEvent::PreToolUse { payload } => {
+                    let hook = read_event_json(payload).await;
+                    let verdict = parallax_codex_hooks::pre_tool_use(&hook).await;
+                    if verdict.blocked {
+                        print!(
+                            "{}",
+                            serde_json::json!({
+                                "decision": "block",
+                                "reason": verdict.reasons.join("; "),
+                            })
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                CodexHookEvent::PostToolUse { payload } => {
+                    let hook = read_event_json(payload).await;
+                    parallax_codex_hooks::post_tool_use(&hook).await;
+                }
+                CodexHookEvent::Notification { payload } => {
+                    let hook = read_event_json(payload).await;
+                    parallax_codex_hooks::notification(&hook).await;
+                }
+            }
+        }
     }
+}
+
+/// Read event JSON from a trailing arg (Codex `notify` style) when present,
+/// otherwise from stdin. Exits 0 on missing/invalid input (fail open).
+async fn read_event_json(payload: Option<String>) -> serde_json::Value {
+    if let Some(raw) = payload {
+        return serde_json::from_str(&raw).unwrap_or_else(|_| std::process::exit(0));
+    }
+    read_stdin_json().await
 }
 
 async fn read_stdin_json() -> serde_json::Value {

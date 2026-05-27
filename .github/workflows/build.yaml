@@ -30,6 +30,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
       - run: cargo test --all-features
       - run: cargo test --manifest-path integrations/claudecode/Cargo.toml
+      - run: cargo test --manifest-path integrations/codex/Cargo.toml
 
   build:
     name: Build release (${{ matrix.target }})
@@ -91,6 +92,7 @@ jobs:
 
           cargo build --release --target ${{ matrix.target }}
           cargo build --release --target ${{ matrix.target }} --manifest-path integrations/claudecode/Cargo.toml
+          cargo build --release --target ${{ matrix.target }} --manifest-path integrations/codex/Cargo.toml
 
       - name: Archive binary
         shell: bash
@@ -108,9 +110,11 @@ jobs:
           ASSET_NAME="parallax-${VERSION}-${{ matrix.target }}.tar.gz"
 
           mkdir -p dist/integrations/claudecode
-          
+          mkdir -p dist/integrations/codex
+
           cp target/${{ matrix.target }}/release/parallax dist/
           cp integrations/claudecode/target/${{ matrix.target }}/release/parallax-hooks dist/integrations/claudecode
+          cp integrations/codex/target/${{ matrix.target }}/release/parallax-codex-hooks dist/integrations/codex
           cp -r integrations/openclaw dist/integrations/openclaw
           cp LICENSE* dist/ || echo "License not found"
           cp README* dist/ || echo "Readme not found"

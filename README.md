@@ -256,6 +256,10 @@ Parallax includes a dedicated integration for [OpenClaw](https://openclaw.ai) ag
 
 Parallax includes a dedicated integration for [Claude Code](https://claude.ai/code) agent systems. It writes lifecycle hooks into `.claude/settings.json` and can be installed per-project or copied to a user-level Claude config. See [docs/integrations/claudecode.md](docs/integrations/claudecode.md) for full setup instructions.
 
+### Codex CLI
+
+Parallax includes a dedicated integration for [Codex CLI](https://github.com/openai/codex). It writes a `notify` hook into `~/.codex/config.toml` that forwards agent events to the Parallax evaluation server. See [docs/integrations/codex.md](docs/integrations/codex.md) for full setup instructions.
+
 ## CLI Reference
 
 ```
@@ -269,6 +273,7 @@ parallax serve [OPTIONS]
 parallax setup <COMMAND>
   openclaw   Configure OpenClaw to route through Parallax
   claudecode Configure Claude Code hooks to route through Parallax
+  codex      Configure Codex CLI notify hook to route through Parallax
 
 parallax setup openclaw [OPTIONS]
       --host <HOST>         Proxy host [default: 127.0.0.1]
@@ -279,17 +284,24 @@ parallax setup claudecode [OPTIONS]
       --host <HOST>         Proxy host [default: 127.0.0.1]
       --port <PORT>         Proxy port [default: 9920]
 
+parallax setup codex [OPTIONS]
+      --host <HOST>         Proxy host [default: 127.0.0.1]
+      --port <PORT>         Proxy port [default: 9920]
+
 parallax revert <COMMAND>
   openclaw   Revert OpenClaw to use Anthropic directly
   claudecode Revert Claude Code hooks
+  codex      Revert Codex CLI notify hook
 
 parallax revert openclaw [OPTIONS]
       --model <MODEL>       Model ID [default: claude-sonnet-4-20250514]
 
 parallax revert claudecode
+
+parallax revert codex
 ```
 
-Supported frameworks: `openclaw`, `claudecode` (more coming in v0.3).
+Supported frameworks: `openclaw`, `claudecode`, `codex` (more coming in v0.3).
 
 ## 🗺️ Roadmap
 
