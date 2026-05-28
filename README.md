@@ -301,29 +301,29 @@ parallax revert claudecode
 parallax revert codex
 ```
 
-Supported frameworks: `openclaw`, `claudecode`, `codex` (more coming in v0.3).
+Supported frameworks: `openclaw`, `claudecode`, `codex`.
 
 ## 🗺️ Roadmap
 
-### v0.3 -- Multi-Framework & Multi-Provider Support
+### -- Multi-Framework & Multi-Provider Support
 - Generic `parallax setup <name>` for LangChain, CrewAI, OpenAI Agents SDK
 - Integration directory structure for framework integrations
 - OpenAI-compatible proxy mode (`/v1/chat/completions`) covering OpenAI, Azure OpenAI, and local models (Ollama, LM Studio)
 - Configurable upstream provider in `config.yaml`
 
-### v0.4 -- Advanced Evaluators
+### -- Advanced Evaluators
 - Embedding-based semantic prompt injection detection
 - Tool argument JSON Schema validation
 - Multi-turn escalation detection across conversation history
 - Token budget enforcement per session/user
 
-### v0.5 -- Extended Lifecycle Stages
+### -- Extended Lifecycle Stages
 - `response.after` -- evaluate LLM responses before returning to the user
 - `memory.before` -- evaluate before writing to agent memory/context
 - RAG pipeline stages (`retrieval.before`, `retrieval.after`)
 - Rule hot-reload -- watch config file for changes without restart
 
-### v0.6 -- SDKs and Ecosystem
+### -- SDKs and Ecosystem
 - Python client library (`pip install parallax-client`) with LangChain/CrewAI decorators
 - TypeScript client library (`npm install @parallax/client`)
 - Webhook integrations -- Slack, PagerDuty, and SIEM connectors
