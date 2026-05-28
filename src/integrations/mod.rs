@@ -4,4 +4,5 @@
 //! specific agent framework to route traffic through the Parallax proxy.
 
 pub mod claudecode;
+pub mod codex;
 pub mod openclaw;

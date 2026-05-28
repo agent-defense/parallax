@@ -6,3 +6,4 @@ Cargo.lock
 .DS_Store
 .idea
 /integrations/claudecode/target
+/integrations/codex/target

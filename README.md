@@ -256,6 +256,10 @@ Parallax includes a dedicated integration for [OpenClaw](https://openclaw.ai) ag
 
 Parallax includes a dedicated integration for [Claude Code](https://claude.ai/code) agent systems. It writes lifecycle hooks into `.claude/settings.json` and can be installed per-project or copied to a user-level Claude config. See [docs/integrations/claudecode.md](docs/integrations/claudecode.md) for full setup instructions.
 
+### Codex CLI
+
+Parallax includes a dedicated integration for [Codex CLI](https://github.com/openai/codex). It writes `notify`, `PreToolUse`, and `PostToolUse` hooks into `~/.codex/config.toml` that forward agent events to the Parallax evaluation server — `PreToolUse` can block a tool call before it runs. See [docs/integrations/codex.md](docs/integrations/codex.md) for full setup instructions.
+
 ## CLI Reference
 
 ```
@@ -269,6 +273,7 @@ parallax serve [OPTIONS]
 parallax setup <COMMAND>
   openclaw   Configure OpenClaw to route through Parallax
   claudecode Configure Claude Code hooks to route through Parallax
+  codex      Configure Codex CLI hooks to route through Parallax
 
 parallax setup openclaw [OPTIONS]
       --host <HOST>         Proxy host [default: 127.0.0.1]
@@ -279,39 +284,46 @@ parallax setup claudecode [OPTIONS]
       --host <HOST>         Proxy host [default: 127.0.0.1]
       --port <PORT>         Proxy port [default: 9920]
 
+parallax setup codex [OPTIONS]
+      --host <HOST>         Proxy host [default: 127.0.0.1]
+      --port <PORT>         Proxy port [default: 9920]
+
 parallax revert <COMMAND>
   openclaw   Revert OpenClaw to use Anthropic directly
   claudecode Revert Claude Code hooks
+  codex      Revert Codex CLI hooks
 
 parallax revert openclaw [OPTIONS]
       --model <MODEL>       Model ID [default: claude-sonnet-4-20250514]
 
 parallax revert claudecode
+
+parallax revert codex
 ```
 
-Supported frameworks: `openclaw`, `claudecode` (more coming in v0.3).
+Supported frameworks: `openclaw`, `claudecode`, `codex`.
 
 ## 🗺️ Roadmap
 
-### v0.3 -- Multi-Framework & Multi-Provider Support
+### -- Multi-Framework & Multi-Provider Support
 - Generic `parallax setup <name>` for LangChain, CrewAI, OpenAI Agents SDK
 - Integration directory structure for framework integrations
 - OpenAI-compatible proxy mode (`/v1/chat/completions`) covering OpenAI, Azure OpenAI, and local models (Ollama, LM Studio)
 - Configurable upstream provider in `config.yaml`
 
-### v0.4 -- Advanced Evaluators
+### -- Advanced Evaluators
 - Embedding-based semantic prompt injection detection
 - Tool argument JSON Schema validation
 - Multi-turn escalation detection across conversation history
 - Token budget enforcement per session/user
 
-### v0.5 -- Extended Lifecycle Stages
+### -- Extended Lifecycle Stages
 - `response.after` -- evaluate LLM responses before returning to the user
 - `memory.before` -- evaluate before writing to agent memory/context
 - RAG pipeline stages (`retrieval.before`, `retrieval.after`)
 - Rule hot-reload -- watch config file for changes without restart
 
-### v0.6 -- SDKs and Ecosystem
+### -- SDKs and Ecosystem
 - Python client library (`pip install parallax-client`) with LangChain/CrewAI decorators
 - TypeScript client library (`npm install @parallax/client`)
 - Webhook integrations -- Slack, PagerDuty, and SIEM connectors
