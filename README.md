@@ -55,10 +55,12 @@ Requires [Rust](https://rustup.rs/) 1.70+. No other dependencies.
 ./parallax serve
 ```
 
-This auto-discovers `parallax.yaml` (the starter config with essential rules). For the full 54-rule set:
+This auto-discovers `parallax.yaml` in the current directory. If a `rules/` directory sits next to it, the full curated rule set under [`rules/`](rules/) is auto-discovered too (one evaluator per file, engine-typical default stages). Drop `rules/` and only the inline starter rules in `parallax.yaml` load — useful for a stripped-down install.
+
+To point at a config in another location:
 
 ```bash
-./parallax serve -c config.yaml
+./parallax serve -c /path/to/parallax.yaml
 ```
 
 ### 3. Test it
@@ -100,7 +102,7 @@ See [docs/RULES.md](docs/RULES.md) for the full reference.
 
 ## 📝 Configuration
 
-One YAML file, three sections:
+One YAML file, four sections.
 
 ### Server
 
@@ -119,32 +121,59 @@ reporting:
   webhook_events: [block, redact]       # Filter which decisions to send
 ```
 
-### Evaluators
+### Evaluators (inline starter rules)
 
-Evaluators are the decision rules. Each has a `name`, `type`, the `stages` it applies to, and either inline `rules` or a reference to an external rule file/directory:
+Inline evaluators are short, hand-picked rules that ship in [`parallax.yaml`](parallax.yaml) so a bare `parallax serve` (no rules tree) still blocks the obvious. Each has a `name`, `type`, the `stages` it applies to, and inline `rules`:
 
 ```yaml
 evaluators:
-  # Rules pulled from an external file (recommended for non-trivial rule sets):
-  - name: secrets-scanner
-    type: regex
-    stages: [tool.before, tool.after]
-    rules_file: ./rules/regex/secrets.yaml
-
-  # Or inline, for short ad-hoc rule sets:
-  - name: dangerous-commands
+  - name: starter-dangerous-commands
     type: regex
     stages: [tool.before]
     rules:
       - id: cmd-001
-        title: Recursive delete
+        title: Recursive delete root
         description: Blocks recursive deletion of root filesystem
-        pattern: "rm\\s+-rf\\s+/"
+        pattern: "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\\s+/"
         action: block
-        fields: [tool_args.command]       # Only check this field
+        fields: [tool_args.command]
 ```
 
-See [config.yaml](config.yaml) for the full configuration (delegates to the rule library under [`rules/`](rules/)), or [parallax.yaml](parallax.yaml) for a minimal inline starter.
+### Rules tree (auto-discovered)
+
+If a `rules/` directory sits next to `parallax.yaml` (or you point `rules_dir:` at one), every file under `<rules_dir>/<engine>/*.yaml` is auto-loaded as its own evaluator. Two file shapes are supported:
+
+```yaml
+# Bare list — uses engine-default stages and filename stem as evaluator name.
+- id: sc-001
+  title: Custom PyPI index
+  keywords: ["--index-url ", "--extra-index-url "]
+  action: detect
+  priority: medium
+
+# With header — overrides name / stages / enabled.
+evaluator:
+  name: pii-scanner
+  stages: [tool.after]
+rules:
+  - id: pii-001
+    title: SSN
+    pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+    action: redact
+```
+
+When an inline rule id (in `evaluators:`) collides with a discovered rule id (in `rules/`), the discovered version wins — so dropping a `rules/` tree in cleanly upgrades the inline starter to the full curated set.
+
+Engine-default stages: `regex` and `sigma` run on `tool.before` + `tool.after`; `pattern`, `cel`, and `sql` run on `tool.before`. Override per-file with the `evaluator: { stages: [...] }` header.
+
+### Disabling evaluators
+
+```yaml
+disabled:
+  - pii-scanner            # name of an inline OR auto-discovered evaluator
+```
+
+See [parallax.yaml](parallax.yaml) for the shipped config and [`rules/`](rules/) for the curated rule library.
 
 ## Evaluator Types
 
@@ -183,7 +212,8 @@ Evaluators run in cost order (cheapest first) and short-circuit on block.
 Exposes a `/evaluate` HTTP endpoint. Your agent calls it at each lifecycle stage and acts on the decision.
 
 ```bash
-parallax serve -c config.yaml
+parallax serve            # auto-discovers ./parallax.yaml + ./rules/
+parallax serve -c /etc/parallax/parallax.yaml
 ```
 
 **POST /evaluate**
@@ -207,7 +237,7 @@ parallax serve -c config.yaml
 Acts as a reverse proxy between your agent and the LLM API. All traffic is automatically evaluated -- no integration code needed.
 
 ```bash
-parallax serve --mode proxy -c config.yaml
+parallax serve --mode proxy
 ```
 
 ```
@@ -306,7 +336,7 @@ Supported frameworks: `openclaw`, `claudecode`, `codex`.
 - Generic `parallax setup <name>` for LangChain, CrewAI, OpenAI Agents SDK
 - Integration directory structure for framework integrations
 - OpenAI-compatible proxy mode (`/v1/chat/completions`) covering OpenAI, Azure OpenAI, and local models (Ollama, LM Studio)
-- Configurable upstream provider in `config.yaml`
+- Configurable upstream provider in `parallax.yaml`
 
 ### -- Advanced Evaluators
 - Embedding-based semantic prompt injection detection
@@ -336,7 +366,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details on the evaluator ch
 cargo build            # Dev build
 cargo test             # Run tests (45 tests)
 cargo build --release  # Optimized release build
-RUST_LOG=debug cargo run -- serve -c config.yaml
+RUST_LOG=debug cargo run -- serve
 ```
 
 ## 📄 License

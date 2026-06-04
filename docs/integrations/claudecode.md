@@ -7,7 +7,7 @@ The integration is a native Rust binary — no Node.js or TypeScript runtime req
 ## Setup
 
 ```bash
-parallax serve -c config.yaml
+parallax serve
 parallax setup claudecode
 ```
 

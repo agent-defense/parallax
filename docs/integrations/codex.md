@@ -9,7 +9,7 @@ The integration is a native Rust binary — no Node.js or Python runtime require
 ## Setup
 
 ```bash
-parallax serve -c config.yaml
+parallax serve
 parallax setup codex
 ```
 

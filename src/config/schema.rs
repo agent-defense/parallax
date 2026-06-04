@@ -13,8 +13,20 @@ pub struct PlatformConfig {
     #[serde(default)]
     pub evaluators: Vec<EvaluatorConfig>,
     /// Optional directory to load additional evaluator YAML files from.
+    /// (Each file declares a full evaluator with `name`, `type`, etc.)
     #[serde(default)]
     pub evaluators_dir: Option<String>,
+    /// Root of the rules tree to auto-discover. When set (or when `./rules`
+    /// exists next to the config file), the loader walks
+    /// `<rules_dir>/<engine>/*.yaml` and registers one evaluator per file
+    /// using engine-default stages unless the file carries an `evaluator:`
+    /// header.
+    #[serde(default)]
+    pub rules_dir: Option<String>,
+    /// Evaluator names to suppress after auto-discovery (matches both
+    /// inline `evaluators` and rules-tree-discovered ones).
+    #[serde(default)]
+    pub disabled: Vec<String>,
 }
 
 /// HTTP server bind address. Defaults to `127.0.0.1:9920`.

@@ -46,7 +46,7 @@ pub fn setup(host: &str, port: u16, model: &str) {
     println!("  Proxy URL: {}", base_url);
     println!();
     println!("Start the proxy with:");
-    println!("  parallax serve --mode proxy -c <config.yaml>");
+    println!("  parallax serve --mode proxy");
 }
 
 /// Revert OpenClaw to use the Anthropic API directly, removing the proxy provider.

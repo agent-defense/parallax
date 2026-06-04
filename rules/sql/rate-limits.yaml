@@ -1,6 +1,6 @@
 # Rate-limit / aggregate detection — SQL rules
-# Loaded by the `rate-limits` evaluator (see config.yaml).
-# Stages: tool.before, tool.after.
+# Auto-discovered. Evaluator name = filename stem (`rate-limits`).
+# Default stages: tool.before, tool.after.
 #
 # Available query parameters: :session_id, :user_id, :channel, :tool_name, :now
 

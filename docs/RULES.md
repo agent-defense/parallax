@@ -1,6 +1,6 @@
 # Security Rules Reference
 
-Parallax ships with **54 active rules across 13 threat categories** (plus one detect-only swap rule shipped commented-out), providing defense-in-depth for AI agent systems. Rules live under [`rules/`](../rules), grouped by evaluator engine (`regex/`, `pattern/`, `cel/`, `sigma/`, `sql/`), and are wired up by the evaluators declared in [`config.yaml`](../config.yaml).
+Parallax ships with **54 active rules across 13 threat categories** (plus one detect-only swap rule shipped commented-out), providing defense-in-depth for AI agent systems. Rules live under [`rules/`](../rules), grouped by evaluator engine (`regex/`, `pattern/`, `cel/`, `sigma/`, `sql/`), and are **auto-discovered at startup** — one evaluator per file, named after the filename stem, with engine-typical default stages.
 
 **Design principles:**
 
@@ -267,15 +267,17 @@ All custom rules should include the three standard metadata fields: `id`, `title
 
 ### Where rules live
 
-Every evaluator type loads its rules from one of three places:
+Three loading paths exist; in order of preference:
 
 | Source | Used by | Behavior |
 |--------|---------|----------|
-| `rules_file: <path>` | `regex`, `pattern`, `cel`, `sql` | Path to a YAML file containing a sequence of rule entries |
-| `rules_dir: <path>` | `regex`, `pattern`, `cel`, `sql`, `sigma` | Directory of `.yaml` files; loaded in sorted filename order. Sigma also supports multi-document files. |
-| `rules:` (inline) | all | Rules embedded directly in `config.yaml` |
+| `rules/` auto-discovery | `regex`, `pattern`, `cel`, `sql`, `sigma` | Default. The loader walks `./rules/<engine>/*.yaml` and registers one evaluator per file. Evaluator name = filename stem. Stages = engine-typical defaults unless the file carries an `evaluator: { stages: [...] }` header. Override the root with `rules_dir:` in `parallax.yaml`. |
+| `rules:` (inline) | all | Rules embedded under `evaluators:` in `parallax.yaml`. Used for the shipped starter set. |
+| `rules_file: <path>`, `rules_dir: <path>` on an inline evaluator | `regex`, `pattern`, `cel`, `sql`, `sigma` | Explicit external references — appended to that evaluator's `rules:` list at load time. |
 
-Inline rules and file-loaded rules are merged: inline first, then file/directory contents appended. Paths are resolved relative to the config file.
+When an inline rule id collides with an id from the `rules/` tree, the rules-tree version wins (so the shipped starter rules in `parallax.yaml` are transparently upgraded when the curated tree is present).
+
+To suppress a specific evaluator entirely, add its name (inline or auto-discovered) to the top-level `disabled:` list in `parallax.yaml`.
 
 ### Adding a Sigma rule
 
@@ -297,7 +299,7 @@ action: block    # block, detect, redact, or allow
 
 ### Adding a CEL rule
 
-Append to one of the existing files in `rules/cel/`, or create a new file and add an evaluator entry to `config.yaml` that points at it via `rules_file:`. Pick a category prefix (e.g. `pol`, `pe`, `mm`, or a new one for your category) and a free numeric slot:
+Append to one of the existing files in `rules/cel/`, or drop a new `rules/cel/<name>.yaml`. A bare list works for default stages; add an `evaluator:` header to override stages or the evaluator name. Pick a category prefix (`pol`, `pe`, `mm`, or your own) and a free numeric slot:
 
 ```yaml
 - id: pol-099
@@ -310,7 +312,7 @@ Append to one of the existing files in `rules/cel/`, or create a new file and ad
 
 ### Adding a regex rule
 
-Append to one of the existing files in `rules/regex/`, or create a new one and reference it from `config.yaml`. Pick a category prefix (e.g. `sec`, `pii`, `exfil`, `cmd`, or a new one) and a free numeric slot:
+Append to one of the existing files in `rules/regex/`, or drop a new `rules/regex/<name>.yaml`. Pick a category prefix (`sec`, `pii`, `exfil`, `cmd`, or your own) and a free numeric slot:
 
 ```yaml
 - id: cmd-099
@@ -323,7 +325,7 @@ Append to one of the existing files in `rules/regex/`, or create a new one and r
 
 ### Adding a pattern rule
 
-Append to a file in `rules/pattern/`, or wire a new file in via `rules_file:`. Pick a category prefix (e.g. `sql`, `sc`, or a new one) and a free numeric slot:
+Append to a file in `rules/pattern/`, or drop a new file. Pick a category prefix (`sql`, `sc`, or your own) and a free numeric slot:
 
 ```yaml
 - id: sc-099
@@ -335,7 +337,7 @@ Append to a file in `rules/pattern/`, or wire a new file in via `rules_file:`. P
 
 ### Adding a SQL rule
 
-Append to `rules/sql/rate-limits.yaml` (or a new file referenced from `config.yaml`). Use the `rl` category prefix (or define a new one for your category):
+Append to `rules/sql/rate-limits.yaml`, or drop a new `rules/sql/<name>.yaml`. Use the `rl` category prefix (or define a new one):
 
 ```yaml
 - id: rl-099

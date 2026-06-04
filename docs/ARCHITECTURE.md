@@ -134,8 +134,10 @@ parallax/
 │   ├── regex/               # Regex rule files
 │   ├── sigma/               # Sigma detection rules (multi-doc YAML)
 │   └── sql/                 # SQL aggregate rule files
-├── config.yaml              # Full configuration (delegates to rules/)
-├── parallax.yaml            # Minimal inline starter (auto-discovered)
+├── parallax.yaml            # Single entry point: server/proxy/reporting +
+│                            #   inline starter rules. Auto-discovered in the
+│                            #   current directory; ./rules/ is loaded too if
+│                            #   present (per-engine file walks).
 ├── Cargo.toml
 └── docs/
     ├── ARCHITECTURE.md      # This file

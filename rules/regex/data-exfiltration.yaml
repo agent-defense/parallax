@@ -1,6 +1,6 @@
 # Data exfiltration — regex rules
-# Loaded by the `data-exfiltration` evaluator (see config.yaml).
-# Stages: tool.before, tool.after.
+# Auto-discovered. Evaluator name = filename stem (`data-exfiltration`).
+# Default stages: tool.before, tool.after.
 
 - id: exfil-001
   title: Base64-encoded secret indicator
