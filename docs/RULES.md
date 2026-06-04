@@ -17,21 +17,32 @@ Every rule, regardless of evaluator engine, has three standard metadata fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | Yes | Unique identifier for the rule (e.g. `cel-pe-001`, `regex-sec-003`, `pi-001`) |
+| `id` | Yes | Unique identifier for the rule, formatted `<category>-NNN` (e.g. `pe-001`, `sec-003`, `pi-001`) |
 | `title` | Yes | Short human-readable name |
 | `description` | Yes | Longer explanation of what the rule detects and why |
 
 When a rule triggers, `id`, `title`, and `description` are included in the evaluation result metadata alongside engine-specific fields.
 
-**ID conventions by engine:**
+**ID conventions by category:**
 
-| Engine | Prefix | Example |
-|--------|--------|---------|
-| Sigma | category-specific | `dt-001`, `pi-002`, `recon-003`, `shadow-001` |
-| CEL | `cel-{category}-NNN` | `cel-pol-001`, `cel-pe-003`, `cel-mm-002` |
-| Regex | `regex-{category}-NNN` | `regex-sec-001`, `regex-pii-003`, `regex-cmd-002` |
-| Pattern | `pat-{category}-NNN` | `pat-sql-001`, `pat-sc-002` |
-| SQL | `sql-{category}-NNN` | `sql-rl-001`, `sql-rl-002` |
+Every rule ID uses the form `<category>-NNN`. The category prefix is the canonical key for backend grouping; the engine that implements the rule is implied by the directory under `rules/` and is _not_ encoded in the ID.
+
+| Category | Prefix | Engine | Example |
+|----------|--------|--------|---------|
+| Secrets | `sec` | regex | `sec-001` |
+| PII | `pii` | regex | `pii-003` |
+| Data exfiltration | `exfil` | regex | `exfil-002` |
+| Dangerous commands | `cmd` | regex | `cmd-001` |
+| SQL injection | `sql` | pattern | `sql-001` |
+| Supply chain | `sc` | pattern | `sc-002` |
+| General policies | `pol` | cel | `pol-001` |
+| Privilege escalation | `pe` | cel | `pe-003` |
+| Model manipulation | `mm` | cel | `mm-002` |
+| Rate limiting | `rl` | sql | `rl-001` |
+| Dangerous tools | `dt` | sigma | `dt-001` |
+| Prompt injection | `pi` | sigma | `pi-002` |
+| Reconnaissance | `recon` | sigma | `recon-003` |
+| Shadow IT | `shadow` | sigma | `shadow-001` |
 
 ---
 
@@ -59,12 +70,12 @@ Redacts or blocks common secret patterns before they leak through tool calls or 
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-sec-001 | AWS Access Key | Detects AWS access key IDs starting with AKIA | Redact |
-| regex-sec-002 | AWS Secret Key | Detects AWS secret access keys in configuration or environment variables | Redact |
-| regex-sec-003 | GitHub Personal Access Token | Detects GitHub personal access tokens (classic format) | Redact |
-| regex-sec-004 | GitHub Fine-Grained Token | Detects GitHub fine-grained personal access tokens | Redact |
-| regex-sec-005 | Generic API Key | Detects generic API keys and secret keys in assignments | Redact |
-| regex-sec-006 | Private Key Block | Detects PEM-encoded private key blocks | Block |
+| sec-001 | AWS Access Key | Detects AWS access key IDs starting with AKIA | Redact |
+| sec-002 | AWS Secret Key | Detects AWS secret access keys in configuration or environment variables | Redact |
+| sec-003 | GitHub Personal Access Token | Detects GitHub personal access tokens (classic format) | Redact |
+| sec-004 | GitHub Fine-Grained Token | Detects GitHub fine-grained personal access tokens | Redact |
+| sec-005 | Generic API Key | Detects generic API keys and secret keys in assignments | Redact |
+| sec-006 | Private Key Block | Detects PEM-encoded private key blocks | Block |
 
 **False-positive notes:** The generic API key pattern may match configuration documentation that contains placeholder keys. Use the `fields` option to restrict matching to specific fields if needed.
 
@@ -78,11 +89,11 @@ Redacts personally identifiable information from tool outputs before they reach 
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-pii-001 | Social Security Number | Detects US Social Security Numbers in NNN-NN-NNNN format | Redact |
-| regex-pii-002 | Credit Card - Visa | Detects Visa credit card numbers | Redact |
-| regex-pii-003 | Credit Card - Mastercard | Detects Mastercard credit card numbers | Redact |
-| regex-pii-004 | Credit Card - Amex | Detects American Express credit card numbers | Redact |
-| regex-pii-005 | US Phone Number | Detects US phone numbers in various formats | Redact |
+| pii-001 | Social Security Number | Detects US Social Security Numbers in NNN-NN-NNNN format | Redact |
+| pii-002 | Credit Card - Visa | Detects Visa credit card numbers | Redact |
+| pii-003 | Credit Card - Mastercard | Detects Mastercard credit card numbers | Redact |
+| pii-004 | Credit Card - Amex | Detects American Express credit card numbers | Redact |
+| pii-005 | US Phone Number | Detects US phone numbers in various formats | Redact |
 
 **False-positive notes:** The SSN pattern will match any `NNN-NN-NNNN` format, including some date formats and version numbers. The phone number pattern may match numeric sequences in technical output.
 
@@ -96,9 +107,9 @@ Detects encoded data and indicators of data being prepared for exfiltration.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-exfil-001 | Base64-encoded secret indicator | Detects base64-encoded values following secret-like key names | Detect |
-| regex-exfil-002 | Long hex-encoded data block | Detects long hex-encoded strings that may indicate data exfiltration | Detect |
-| regex-exfil-003 | Data URI with base64 | Detects data URIs with large base64 payloads | Detect |
+| exfil-001 | Base64-encoded secret indicator | Detects base64-encoded values following secret-like key names | Detect |
+| exfil-002 | Long hex-encoded data block | Detects long hex-encoded strings that may indicate data exfiltration | Detect |
+| exfil-003 | Data URI with base64 | Detects data URIs with large base64 payloads | Detect |
 
 ---
 
@@ -110,20 +121,20 @@ Blocks dangerous shell commands before they execute. Covered by multiple engines
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-cmd-001 | Recursive delete root | Blocks recursive deletion of root filesystem | Block |
-| regex-cmd-002 | Format disk | Blocks filesystem formatting commands | Block |
-| regex-cmd-003 | Disk overwrite | Blocks raw disk writes via dd to device files | Block |
-| regex-cmd-004 | Chmod 777 recursive | Blocks recursive permission changes to world-writable | Block |
-| regex-cmd-005 | Curl pipe to shell | Blocks piping curl output directly to a shell interpreter | Block |
+| cmd-001 | Recursive delete root | Blocks recursive deletion of root filesystem | Block |
+| cmd-002 | Format disk | Blocks filesystem formatting commands | Block |
+| cmd-003 | Disk overwrite | Blocks raw disk writes via dd to device files | Block |
+| cmd-004 | Chmod 777 recursive | Blocks recursive permission changes to world-writable | Block |
+| cmd-005 | Curl pipe to shell | Blocks piping curl output directly to a shell interpreter | Block |
 
 **Engine:** CEL | **File:** `rules/cel/policies.yaml` | **Stage:** `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| cel-pol-001 | Block recursive file deletion | Prevents recursive file deletion via rm -r commands | Block |
-| cel-pol-002 | Block world-writable permissions | Prevents setting chmod 777 which makes files world-writable | Block |
-| cel-pol-003 | Detect sudo usage | Detects elevated privilege execution via sudo | Detect |
-| cel-pol-004 | Detect environment variable dump | Detects environment variable dumps that may expose secrets | Detect |
+| pol-001 | Block recursive file deletion | Prevents recursive file deletion via rm -r commands | Block |
+| pol-002 | Block world-writable permissions | Prevents setting chmod 777 which makes files world-writable | Block |
+| pol-003 | Detect sudo usage | Detects elevated privilege execution via sudo | Detect |
+| pol-004 | Detect environment variable dump | Detects environment variable dumps that may expose secrets | Detect |
 
 ---
 
@@ -135,15 +146,15 @@ Detects attempts to gain elevated permissions.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| cel-pe-001 | Block sudo privilege escalation | Blocks privilege escalation via sudo command | _Disabled by default_ |
-| cel-pe-002 | Block user switching | Blocks switching to another user via su command | Block |
-| cel-pe-003 | Block pkexec privilege escalation | Blocks privilege escalation via pkexec | Block |
-| cel-pe-004 | Block doas privilege escalation | Blocks privilege escalation via doas command | Block |
-| cel-pe-005 | Block chown to root | Blocks changing file ownership to root | Block |
-| cel-pe-006 | Block setuid bit | Blocks setting the setuid bit on files | Block |
-| cel-pe-007 | Block sudoers modification | Blocks modifying the sudoers configuration | Block |
+| pe-001 | Block sudo privilege escalation | Blocks privilege escalation via sudo command | _Disabled by default_ |
+| pe-002 | Block user switching | Blocks switching to another user via su command | Block |
+| pe-003 | Block pkexec privilege escalation | Blocks privilege escalation via pkexec | Block |
+| pe-004 | Block doas privilege escalation | Blocks privilege escalation via doas command | Block |
+| pe-005 | Block chown to root | Blocks changing file ownership to root | Block |
+| pe-006 | Block setuid bit | Blocks setting the setuid bit on files | Block |
+| pe-007 | Block sudoers modification | Blocks modifying the sudoers configuration | Block |
 
-**Default sudo policy:** `cel-pe-001` ships commented out so `sudo` is detect-only via `cel-pol-003` (Dangerous Commands section). To enforce a hard block, uncomment `cel-pe-001` in `rules/cel/privilege-escalation.yaml` and consider removing `cel-pol-003` to avoid duplicate metadata in the audit log.
+**Default sudo policy:** `pe-001` ships commented out so `sudo` is detect-only via `pol-003` (Dangerous Commands section). To enforce a hard block, uncomment `pe-001` in `rules/cel/privilege-escalation.yaml` and consider removing `pol-003` to avoid duplicate metadata in the audit log.
 
 ---
 
@@ -201,10 +212,10 @@ Detects attempts to tamper with model parameters or redefine tool behavior.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| cel-mm-001 | Block system prompt injection via tools | Detects attempts to modify the system prompt through tool calls | Block |
-| cel-mm-002 | Detect temperature override attempt | Detects attempts to modify the model temperature parameter | Detect |
-| cel-mm-003 | Detect tool definitions tampering | Detects attempts to modify or redefine available tool definitions | Detect |
-| cel-mm-004 | Detect max_tokens override attempt | Detects attempts to modify the max_tokens parameter | Detect |
+| mm-001 | Block system prompt injection via tools | Detects attempts to modify the system prompt through tool calls | Block |
+| mm-002 | Detect temperature override attempt | Detects attempts to modify the model temperature parameter | Detect |
+| mm-003 | Detect tool definitions tampering | Detects attempts to modify or redefine available tool definitions | Detect |
+| mm-004 | Detect max_tokens override attempt | Detects attempts to modify the max_tokens parameter | Detect |
 
 ---
 
@@ -216,10 +227,10 @@ Blocks untrusted package installs and dependency confusion attacks.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| pat-sc-001 | Pip install from custom index | Blocks pip installs from non-default package indexes | Block |
-| pat-sc-002 | Npm install from custom registry | Blocks npm installs from non-default registries | Block |
-| pat-sc-003 | Wget pipe to shell | Blocks piping wget output directly to a shell interpreter | Block |
-| pat-sc-004 | Gem install from custom source | Blocks gem installs from non-default sources | Block |
+| sc-001 | Pip install from custom index | Blocks pip installs from non-default package indexes | Block |
+| sc-002 | Npm install from custom registry | Blocks npm installs from non-default registries | Block |
+| sc-003 | Wget pipe to shell | Blocks piping wget output directly to a shell interpreter | Block |
+| sc-004 | Gem install from custom source | Blocks gem installs from non-default sources | Block |
 
 ---
 
@@ -231,7 +242,7 @@ Detects common SQL injection patterns in messages and tool arguments.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| pat-sql-001 | SQL destructive keywords | Detects common SQL injection and destructive query patterns | Detect |
+| sql-001 | SQL destructive keywords | Detects common SQL injection and destructive query patterns | Detect |
 
 **False-positive notes:** Database administration agents will regularly trigger this rule. Switch to `allow` for trusted database management workflows.
 
@@ -245,8 +256,8 @@ Detects abnormal tool usage rates that may indicate automated abuse or infinite 
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| sql-rl-001 | High tool call rate | Detects unusually high tool call rates per session | Detect |
-| sql-rl-002 | Repeated tool abuse | Detects repeated calls to the same tool in a short window | Detect |
+| rl-001 | High tool call rate | Detects unusually high tool call rates per session | Detect |
+| rl-002 | Repeated tool abuse | Detects repeated calls to the same tool in a short window | Detect |
 
 ---
 
@@ -286,10 +297,10 @@ action: block    # block, detect, redact, or allow
 
 ### Adding a CEL rule
 
-Append to one of the existing files in `rules/cel/`, or create a new file and add an evaluator entry to `config.yaml` that points at it via `rules_file:`:
+Append to one of the existing files in `rules/cel/`, or create a new file and add an evaluator entry to `config.yaml` that points at it via `rules_file:`. Pick a category prefix (e.g. `pol`, `pe`, `mm`, or a new one for your category) and a free numeric slot:
 
 ```yaml
-- id: cel-custom-001
+- id: pol-099
   title: My custom CEL rule
   description: Description of what this rule detects
   expr: 'tool_name == "exec" && tool_args_command.contains("dangerous")'
@@ -299,10 +310,10 @@ Append to one of the existing files in `rules/cel/`, or create a new file and ad
 
 ### Adding a regex rule
 
-Append to one of the existing files in `rules/regex/`, or create a new one and reference it from `config.yaml`:
+Append to one of the existing files in `rules/regex/`, or create a new one and reference it from `config.yaml`. Pick a category prefix (e.g. `sec`, `pii`, `exfil`, `cmd`, or a new one) and a free numeric slot:
 
 ```yaml
-- id: regex-custom-001
+- id: cmd-099
   title: My pattern
   description: Detects a dangerous regex pattern in tool arguments
   pattern: "dangerous-regex-here"
@@ -312,10 +323,10 @@ Append to one of the existing files in `rules/regex/`, or create a new one and r
 
 ### Adding a pattern rule
 
-Append to a file in `rules/pattern/`, or wire a new file in via `rules_file:`:
+Append to a file in `rules/pattern/`, or wire a new file in via `rules_file:`. Pick a category prefix (e.g. `sql`, `sc`, or a new one) and a free numeric slot:
 
 ```yaml
-- id: pat-custom-001
+- id: sc-099
   title: My keyword rule
   description: Detects dangerous keywords in tool arguments
   keywords: ["dangerous-keyword"]
@@ -324,10 +335,10 @@ Append to a file in `rules/pattern/`, or wire a new file in via `rules_file:`:
 
 ### Adding a SQL rule
 
-Append to `rules/sql/rate-limits.yaml` (or a new file referenced from `config.yaml`):
+Append to `rules/sql/rate-limits.yaml` (or a new file referenced from `config.yaml`). Use the `rl` category prefix (or define a new one for your category):
 
 ```yaml
-- id: sql-custom-001
+- id: rl-099
   title: My aggregate rule
   description: Detects abnormal event patterns using SQL aggregation
   query: >

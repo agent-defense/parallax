@@ -3,7 +3,7 @@
 # CEL expressions detecting attempts to tamper with model parameters
 # or redefine tool behavior. Fields use underscores.
 
-- id: cel-mm-001
+- id: mm-001
   title: Block system prompt injection via tools
   description: Detects attempts to modify the system prompt through tool calls
   expr: 'tool_name == "exec" && (tool_args_command.contains("system_prompt") || tool_args_command.contains("system_message"))'
@@ -11,7 +11,7 @@
   priority: high
   reason: Modifying system prompt via tool calls is not allowed
 
-- id: cel-mm-002
+- id: mm-002
   title: Detect temperature override attempt
   description: Detects attempts to modify the model temperature parameter
   expr: 'tool_name == "exec" && tool_args_command.matches("temperature.*(=|:)\\s*[0-9]")'
@@ -19,7 +19,7 @@
   priority: medium
   reason: Attempt to modify model temperature parameter detected
 
-- id: cel-mm-003
+- id: mm-003
   title: Detect tool definitions tampering
   description: Detects attempts to modify or redefine available tool definitions
   expr: 'tool_name == "exec" && (tool_args_command.contains("tool_definitions") || tool_args_command.contains("\"tools\""))'
@@ -27,7 +27,7 @@
   priority: medium
   reason: Attempt to modify tool definitions detected
 
-- id: cel-mm-004
+- id: mm-004
   title: Detect max_tokens override attempt
   description: Detects attempts to modify the max_tokens parameter
   expr: 'tool_name == "exec" && tool_args_command.matches("max_tokens.*(=|:)\\s*[0-9]")'

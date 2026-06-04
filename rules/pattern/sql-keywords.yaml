@@ -2,7 +2,7 @@
 # Loaded by the `sql-keywords` evaluator (see config.yaml).
 # Stages: message.before, tool.before.
 
-- id: pat-sql-001
+- id: sql-001
   title: SQL destructive keywords
   description: Detects common SQL injection and destructive query patterns
   keywords:

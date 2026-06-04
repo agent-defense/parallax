@@ -136,7 +136,7 @@ evaluators:
     type: regex
     stages: [tool.before]
     rules:
-      - id: regex-cmd-001
+      - id: cmd-001
         title: Recursive delete
         description: Blocks recursive deletion of root filesystem
         pattern: "rm\\s+-rf\\s+/"

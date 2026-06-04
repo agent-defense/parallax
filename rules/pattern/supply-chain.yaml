@@ -2,7 +2,7 @@
 # Loaded by the `supply-chain` evaluator (see config.yaml).
 # Stages: tool.before.
 
-- id: pat-sc-001
+- id: sc-001
   title: Pip install from custom index
   description: Blocks pip installs from non-default package indexes
   keywords:
@@ -12,7 +12,7 @@
   action: block
   priority: high
 
-- id: pat-sc-002
+- id: sc-002
   title: Npm install from custom registry
   description: Blocks npm installs from non-default registries
   keywords:
@@ -22,7 +22,7 @@
   action: block
   priority: high
 
-- id: pat-sc-003
+- id: sc-003
   title: Wget pipe to shell
   description: Blocks piping wget output directly to a shell interpreter
   keywords:
@@ -32,7 +32,7 @@
   action: block
   priority: high
 
-- id: pat-sc-004
+- id: sc-004
   title: Gem install from custom source
   description: Blocks gem installs from non-default sources
   keywords:

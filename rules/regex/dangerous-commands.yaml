@@ -2,7 +2,7 @@
 # Loaded by the `dangerous-commands` evaluator (see config.yaml).
 # Stages: tool.before.
 
-- id: regex-cmd-001
+- id: cmd-001
   title: Recursive delete root
   description: Blocks recursive deletion of root filesystem
   pattern: "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\\s+/"
@@ -10,7 +10,7 @@
   priority: high
   fields: [tool_args.command]
 
-- id: regex-cmd-002
+- id: cmd-002
   title: Format disk
   description: Blocks filesystem formatting commands
   pattern: "mkfs\\."
@@ -18,7 +18,7 @@
   priority: high
   fields: [tool_args.command]
 
-- id: regex-cmd-003
+- id: cmd-003
   title: Disk overwrite
   description: Blocks raw disk writes via dd to device files
   pattern: "dd\\s+.*of=/dev/"
@@ -26,7 +26,7 @@
   priority: high
   fields: [tool_args.command]
 
-- id: regex-cmd-004
+- id: cmd-004
   title: Chmod 777 recursive
   description: Blocks recursive permission changes to world-writable
   pattern: "chmod\\s+-[a-zA-Z]*R[a-zA-Z]*\\s+777"
@@ -34,7 +34,7 @@
   priority: high
   fields: [tool_args.command]
 
-- id: regex-cmd-005
+- id: cmd-005
   title: Curl pipe to shell
   description: Blocks piping curl output directly to a shell interpreter
   pattern: "curl\\s+.*\\|\\s*(bash|sh|zsh)"
