@@ -1,6 +1,6 @@
 # Security Rules Reference
 
-Parallax ships with **51 rules across 13 threat categories**, providing defense-in-depth for AI agent systems. Rules are organized by threat type, not by evaluator engine -- you can customize, extend, or disable any rule.
+Parallax ships with **54 active rules across 13 threat categories** (plus one detect-only swap rule shipped commented-out), providing defense-in-depth for AI agent systems. Rules live under [`rules/`](../rules), grouped by evaluator engine (`regex/`, `pattern/`, `cel/`, `sigma/`, `sql/`), and are wired up by the evaluators declared in [`config.yaml`](../config.yaml).
 
 **Design principles:**
 
@@ -55,7 +55,7 @@ Detects attempts to extract system prompts, jailbreak the model, or override saf
 
 Redacts or blocks common secret patterns before they leak through tool calls or responses.
 
-**Engine:** Regex | **Evaluator:** `secrets-scanner` | **Stage:** `tool.before`, `tool.after`
+**Engine:** Regex | **Evaluator:** `secrets-scanner` | **File:** `rules/regex/secrets.yaml` | **Stage:** `tool.before`, `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
@@ -74,7 +74,7 @@ Redacts or blocks common secret patterns before they leak through tool calls or 
 
 Redacts personally identifiable information from tool outputs before they reach the user or external systems.
 
-**Engine:** Regex | **Evaluator:** `pii-scanner` | **Stage:** `tool.after`
+**Engine:** Regex | **Evaluator:** `pii-scanner` | **File:** `rules/regex/pii.yaml` | **Stage:** `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
@@ -92,7 +92,7 @@ Redacts personally identifiable information from tool outputs before they reach 
 
 Detects encoded data and indicators of data being prepared for exfiltration.
 
-**Engine:** Regex | **Evaluator:** `data-exfiltration` | **Stage:** `tool.before`, `tool.after`
+**Engine:** Regex | **Evaluator:** `data-exfiltration` | **File:** `rules/regex/data-exfiltration.yaml` | **Stage:** `tool.before`, `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
@@ -106,14 +106,14 @@ Detects encoded data and indicators of data being prepared for exfiltration.
 
 Blocks dangerous shell commands before they execute. Covered by multiple engines for defense-in-depth.
 
-**Engine:** Regex | **Evaluator:** `dangerous-commands` | **Stage:** `tool.before`
+**Engine:** Regex | **Evaluator:** `dangerous-commands` | **File:** `rules/regex/dangerous-commands.yaml` | **Stage:** `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
 | regex-cmd-001 | Recursive delete root | Blocks recursive deletion of root filesystem | Block |
 | regex-cmd-002 | Format disk | Blocks filesystem formatting commands | Block |
 | regex-cmd-003 | Disk overwrite | Blocks raw disk writes via dd to device files | Block |
-| regex-cmd-004 | Chmod 777 recursive | Detects recursive permission changes to world-writable | Detect |
+| regex-cmd-004 | Chmod 777 recursive | Blocks recursive permission changes to world-writable | Block |
 | regex-cmd-005 | Curl pipe to shell | Blocks piping curl output directly to a shell interpreter | Block |
 
 **Engine:** CEL | **File:** `rules/cel/policies.yaml` | **Stage:** `tool.before`
@@ -123,7 +123,7 @@ Blocks dangerous shell commands before they execute. Covered by multiple engines
 | cel-pol-001 | Block recursive file deletion | Prevents recursive file deletion via rm -r commands | Block |
 | cel-pol-002 | Block world-writable permissions | Prevents setting chmod 777 which makes files world-writable | Block |
 | cel-pol-003 | Detect sudo usage | Detects elevated privilege execution via sudo | Detect |
-| cel-pol-004 | Block environment variable dump | Detects environment variable dumps that may expose secrets | Detect |
+| cel-pol-004 | Detect environment variable dump | Detects environment variable dumps that may expose secrets | Detect |
 
 ---
 
@@ -135,7 +135,7 @@ Detects attempts to gain elevated permissions.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| cel-pe-001 | Block sudo privilege escalation | Blocks privilege escalation via sudo command | Block |
+| cel-pe-001 | Block sudo privilege escalation | Blocks privilege escalation via sudo command | _Disabled by default_ |
 | cel-pe-002 | Block user switching | Blocks switching to another user via su command | Block |
 | cel-pe-003 | Block pkexec privilege escalation | Blocks privilege escalation via pkexec | Block |
 | cel-pe-004 | Block doas privilege escalation | Blocks privilege escalation via doas command | Block |
@@ -143,7 +143,7 @@ Detects attempts to gain elevated permissions.
 | cel-pe-006 | Block setuid bit | Blocks setting the setuid bit on files | Block |
 | cel-pe-007 | Block sudoers modification | Blocks modifying the sudoers configuration | Block |
 
-**False-positive notes:** Agents that legitimately need `sudo` for package installation or system configuration should have the `warn-sudo` detect-only rule from `policies.yaml` rather than the hard `block-sudo`.
+**Default sudo policy:** `cel-pe-001` ships commented out so `sudo` is detect-only via `cel-pol-003` (Dangerous Commands section). To enforce a hard block, uncomment `cel-pe-001` in `rules/cel/privilege-escalation.yaml` and consider removing `cel-pol-003` to avoid duplicate metadata in the audit log.
 
 ---
 
@@ -212,7 +212,7 @@ Detects attempts to tamper with model parameters or redefine tool behavior.
 
 Blocks untrusted package installs and dependency confusion attacks.
 
-**Engine:** Pattern | **Evaluator:** `supply-chain` | **Stage:** `tool.before`
+**Engine:** Pattern | **Evaluator:** `supply-chain` | **File:** `rules/pattern/supply-chain.yaml` | **Stage:** `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
@@ -227,7 +227,7 @@ Blocks untrusted package installs and dependency confusion attacks.
 
 Detects common SQL injection patterns in messages and tool arguments.
 
-**Engine:** Pattern | **Evaluator:** `sql-keywords` | **Stage:** `message.before`, `tool.before`
+**Engine:** Pattern | **Evaluator:** `sql-keywords` | **File:** `rules/pattern/sql-keywords.yaml` | **Stage:** `message.before`, `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
@@ -241,7 +241,7 @@ Detects common SQL injection patterns in messages and tool arguments.
 
 Detects abnormal tool usage rates that may indicate automated abuse or infinite loops.
 
-**Engine:** SQL | **Evaluator:** `rate-limits` | **Stage:** `tool.before`, `tool.after`
+**Engine:** SQL | **Evaluator:** `rate-limits` | **File:** `rules/sql/rate-limits.yaml` | **Stage:** `tool.before`, `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
@@ -254,9 +254,21 @@ Detects abnormal tool usage rates that may indicate automated abuse or infinite 
 
 All custom rules should include the three standard metadata fields: `id`, `title`, and `description`.
 
+### Where rules live
+
+Every evaluator type loads its rules from one of three places:
+
+| Source | Used by | Behavior |
+|--------|---------|----------|
+| `rules_file: <path>` | `regex`, `pattern`, `cel`, `sql` | Path to a YAML file containing a sequence of rule entries |
+| `rules_dir: <path>` | `regex`, `pattern`, `cel`, `sql`, `sigma` | Directory of `.yaml` files; loaded in sorted filename order. Sigma also supports multi-document files. |
+| `rules:` (inline) | all | Rules embedded directly in `config.yaml` |
+
+Inline rules and file-loaded rules are merged: inline first, then file/directory contents appended. Paths are resolved relative to the config file.
+
 ### Adding a Sigma rule
 
-Create a `.yaml` file in `rules/sigma/`. It will be auto-loaded:
+Drop a `.yaml` file in `rules/sigma/` — the `sigma-threats` evaluator auto-loads it:
 
 ```yaml
 title: My custom rule
@@ -274,7 +286,7 @@ action: block    # block, detect, redact, or allow
 
 ### Adding a CEL rule
 
-Add to an existing file in `rules/cel/` or create a new file and reference it in `config.yaml`:
+Append to one of the existing files in `rules/cel/`, or create a new file and add an evaluator entry to `config.yaml` that points at it via `rules_file:`:
 
 ```yaml
 - id: cel-custom-001
@@ -287,46 +299,43 @@ Add to an existing file in `rules/cel/` or create a new file and reference it in
 
 ### Adding a regex rule
 
-Add to an evaluator block in `config.yaml`:
+Append to one of the existing files in `rules/regex/`, or create a new one and reference it from `config.yaml`:
 
 ```yaml
-rules:
-  - id: regex-custom-001
-    title: My pattern
-    description: Detects a dangerous regex pattern in tool arguments
-    pattern: "dangerous-regex-here"
-    action: block           # block, redact, detect, allow
-    fields: [tool_args.command]  # optional: target specific fields
+- id: regex-custom-001
+  title: My pattern
+  description: Detects a dangerous regex pattern in tool arguments
+  pattern: "dangerous-regex-here"
+  action: block               # block, redact, detect, allow
+  fields: [tool_args.command] # optional: target specific fields
 ```
 
 ### Adding a pattern rule
 
-Add to a pattern evaluator block in `config.yaml`:
+Append to a file in `rules/pattern/`, or wire a new file in via `rules_file:`:
 
 ```yaml
-rules:
-  - id: pat-custom-001
-    title: My keyword rule
-    description: Detects dangerous keywords in tool arguments
-    keywords: ["dangerous-keyword"]
-    action: block
+- id: pat-custom-001
+  title: My keyword rule
+  description: Detects dangerous keywords in tool arguments
+  keywords: ["dangerous-keyword"]
+  action: block
 ```
 
 ### Adding a SQL rule
 
-Add to the `rate-limits` evaluator in `config.yaml`:
+Append to `rules/sql/rate-limits.yaml` (or a new file referenced from `config.yaml`):
 
 ```yaml
-rules:
-  - id: sql-custom-001
-    title: My aggregate rule
-    description: Detects abnormal event patterns using SQL aggregation
-    query: >
-      SELECT COUNT(*) as cnt FROM events
-      WHERE session_id = :session_id AND timestamp > :now - 120
-    condition: "cnt > 10"
-    action: detect
-    reason: "What this means"
+- id: sql-custom-001
+  title: My aggregate rule
+  description: Detects abnormal event patterns using SQL aggregation
+  query: >
+    SELECT COUNT(*) as cnt FROM events
+    WHERE session_id = :session_id AND timestamp > :now - 120
+  condition: "cnt > 10"
+  action: detect
+  reason: "What this means"
 ```
 
 Available SQL parameters: `:session_id`, `:user_id`, `:channel`, `:tool_name`, `:now`

@@ -129,14 +129,16 @@ parallax/
 ├── integrations/
 │   └── openclaw/            # OpenClaw server-mode integration (TypeScript)
 ├── rules/
-│   ├── cel/                 # CEL policy files
+│   ├── cel/                 # CEL policy rule files
+│   ├── pattern/             # Keyword pattern rule files
 │   ├── regex/               # Regex rule files
-│   └── sigma/               # Sigma detection rules
-├── config.yaml              # Full configuration example
+│   ├── sigma/               # Sigma detection rules (multi-doc YAML)
+│   └── sql/                 # SQL aggregate rule files
+├── config.yaml              # Full configuration (delegates to rules/)
+├── parallax.yaml            # Minimal inline starter (auto-discovered)
 ├── Cargo.toml
 └── docs/
     ├── ARCHITECTURE.md      # This file
     ├── RULES.md             # Security rules reference
-    ├── config.minimal.yaml  # Minimal starter configuration
     └── integrations/        # Framework integration guides
 ```

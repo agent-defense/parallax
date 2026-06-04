@@ -3,13 +3,18 @@
 # CEL expressions detecting attempts to escalate privileges.
 # Fields use underscores: tool_args.command -> tool_args_command
 
-- id: cel-pe-001
-  title: Block sudo privilege escalation
-  description: Blocks privilege escalation via sudo command
-  expr: 'tool_name == "exec" && tool_args_command.matches("^sudo\\s")'
-  action: block
-  priority: high
-  reason: Privilege escalation via sudo is not allowed
+# cel-pe-001 (Block sudo privilege escalation) is intentionally disabled by
+# default and shipped as detect-only via cel-pol-003 ("Detect sudo usage").
+# To harden, uncomment the rule below; it will fully short-circuit any sudo
+# call. If you do, consider removing cel-pol-003 to avoid duplicate metadata.
+#
+# - id: cel-pe-001
+#   title: Block sudo privilege escalation
+#   description: Blocks privilege escalation via sudo command
+#   expr: 'tool_name == "exec" && tool_args_command.matches("^sudo\\s")'
+#   action: block
+#   priority: high
+#   reason: Privilege escalation via sudo is not allowed
 
 - id: cel-pe-002
   title: Block user switching

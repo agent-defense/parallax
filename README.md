@@ -22,7 +22,7 @@
 - **Single binary, zero runtime dependencies** -- `cargo build --release` produces one static executable. No Python, no JVM, no containers required.
 - **Microsecond evaluation** -- the evaluator chain runs in cost order and short-circuits on the first `block`. Typical decisions complete in under 0.2 ms.
 - **Framework-agnostic** -- works with any agent system that can make HTTP calls. First-class integrations for OpenClaw and Claude Code; LangChain, CrewAI, and OpenAI Agents SDK are on the roadmap.
-- **51 rules out of the box** -- ships with rules covering 13 threat categories: prompt injection, reconnaissance, privilege escalation, PII leakage, supply chain attacks, data exfiltration, and more.
+- **54 rules out of the box** -- ships with rules covering 13 threat categories: prompt injection, reconnaissance, privilege escalation, PII leakage, supply chain attacks, data exfiltration, and more.
 - **Five evaluator engines** -- regex, keyword pattern, Sigma, CEL expressions, and SQL-based temporal analysis. Mix and match for layered defense.
 
 ## ⚙️ How It Works
@@ -55,7 +55,7 @@ Requires [Rust](https://rustup.rs/) 1.70+. No other dependencies.
 ./parallax serve
 ```
 
-This auto-discovers `parallax.yaml` (the starter config with essential rules). For the full 51-rule set:
+This auto-discovers `parallax.yaml` (the starter config with essential rules). For the full 54-rule set:
 
 ```bash
 ./parallax serve -c config.yaml
@@ -121,20 +121,17 @@ reporting:
 
 ### Evaluators
 
-Evaluators are the decision rules. Each has a `name`, `type`, the `stages` it applies to, and `rules`:
+Evaluators are the decision rules. Each has a `name`, `type`, the `stages` it applies to, and either inline `rules` or a reference to an external rule file/directory:
 
 ```yaml
 evaluators:
+  # Rules pulled from an external file (recommended for non-trivial rule sets):
   - name: secrets-scanner
     type: regex
     stages: [tool.before, tool.after]
-    rules:
-      - id: regex-sec-001
-        title: AWS Access Key
-        description: Detects AWS access key IDs starting with AKIA
-        pattern: "AKIA[0-9A-Z]{16}"
-        action: redact
+    rules_file: ./rules/regex/secrets.yaml
 
+  # Or inline, for short ad-hoc rule sets:
   - name: dangerous-commands
     type: regex
     stages: [tool.before]
@@ -147,17 +144,17 @@ evaluators:
         fields: [tool_args.command]       # Only check this field
 ```
 
-See [config.yaml](config.yaml) for a complete working example, or [docs/config.minimal.yaml](docs/config.minimal.yaml) for a minimal starter.
+See [config.yaml](config.yaml) for the full configuration (delegates to the rule library under [`rules/`](rules/)), or [parallax.yaml](parallax.yaml) for a minimal inline starter.
 
 ## Evaluator Types
 
-| Type | Description | Config |
-|------|-------------|--------|
-| **regex** | Compiled regex patterns with AND/OR, negation, field targeting, redaction | `rules` with `pattern` |
-| **pattern** | Keyword substring matching, case-insensitive | `rules` with `keywords` |
-| **sigma** | Sigma-format YAML threat detection with field modifiers and complex conditions | `rules_dir` pointing to YAML files |
-| **cel** | CEL-like expressions (`==`, `!=`, `&&`, `.contains()`, `.startsWith()`, `.matches()`) | `rules_file` pointing to YAML |
-| **sql** | In-memory SQLite for rate limiting, frequency analysis, temporal patterns | `rules` with `query` + `condition` |
+| Type | Description | Rule sources |
+|------|-------------|-------------|
+| **regex** | Compiled regex patterns with AND/OR, negation, field targeting, redaction | inline `rules`, `rules_file`, or `rules_dir` |
+| **pattern** | Keyword substring matching, case-insensitive | inline `rules`, `rules_file`, or `rules_dir` |
+| **sigma** | Sigma-format YAML threat detection with field modifiers and complex conditions | `rules_dir` of multi-document Sigma YAML |
+| **cel** | CEL-like expressions (`==`, `!=`, `&&`, `.contains()`, `.startsWith()`, `.matches()`) | inline `rules`, `rules_file`, or `rules_dir` |
+| **sql** | In-memory SQLite for rate limiting, frequency analysis, temporal patterns | inline `rules`, `rules_file`, or `rules_dir` |
 
 Evaluators run in cost order (cheapest first) and short-circuit on block.
 
