@@ -2,7 +2,7 @@
   "id": "parallax-security",
   "name": "Parallax Security",
   "description": "Parallax security integration — forwards agent lifecycle events to the Parallax evaluation engine",
-  "version": "0.2.0",
+  "version": "0.6.0",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
