@@ -99,7 +99,7 @@ pub fn setup(host: &str, port: u16) {
     println!("Done. Parallax hooks written to {}", settings_path.display());
     println!();
     println!("Start the evaluation server with:");
-    println!("  parallax serve -c config.yaml");
+    println!("  parallax serve");
 }
 
 /// Remove Parallax hook entries from the global Claude Code settings (~/.claude/settings.json).

@@ -1,6 +1,6 @@
 # Security Rules Reference
 
-Parallax ships with **51 rules across 13 threat categories**, providing defense-in-depth for AI agent systems. Rules are organized by threat type, not by evaluator engine -- you can customize, extend, or disable any rule.
+Parallax ships with **54 active rules across 13 threat categories** (plus one detect-only swap rule shipped commented-out), providing defense-in-depth for AI agent systems. Rules live under [`rules/`](../rules), grouped by evaluator engine (`regex/`, `pattern/`, `cel/`, `sigma/`, `sql/`), and are **auto-discovered at startup** — one evaluator per file, named after the filename stem, with engine-typical default stages.
 
 **Design principles:**
 
@@ -17,21 +17,32 @@ Every rule, regardless of evaluator engine, has three standard metadata fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | Yes | Unique identifier for the rule (e.g. `cel-pe-001`, `regex-sec-003`, `pi-001`) |
+| `id` | Yes | Unique identifier for the rule, formatted `<category>-NNN` (e.g. `pe-001`, `sec-003`, `pi-001`) |
 | `title` | Yes | Short human-readable name |
 | `description` | Yes | Longer explanation of what the rule detects and why |
 
 When a rule triggers, `id`, `title`, and `description` are included in the evaluation result metadata alongside engine-specific fields.
 
-**ID conventions by engine:**
+**ID conventions by category:**
 
-| Engine | Prefix | Example |
-|--------|--------|---------|
-| Sigma | category-specific | `dt-001`, `pi-002`, `recon-003`, `shadow-001` |
-| CEL | `cel-{category}-NNN` | `cel-pol-001`, `cel-pe-003`, `cel-mm-002` |
-| Regex | `regex-{category}-NNN` | `regex-sec-001`, `regex-pii-003`, `regex-cmd-002` |
-| Pattern | `pat-{category}-NNN` | `pat-sql-001`, `pat-sc-002` |
-| SQL | `sql-{category}-NNN` | `sql-rl-001`, `sql-rl-002` |
+Every rule ID uses the form `<category>-NNN`. The category prefix is the canonical key for backend grouping; the engine that implements the rule is implied by the directory under `rules/` and is _not_ encoded in the ID.
+
+| Category | Prefix | Engine | Example |
+|----------|--------|--------|---------|
+| Secrets | `sec` | regex | `sec-001` |
+| PII | `pii` | regex | `pii-003` |
+| Data exfiltration | `exfil` | regex | `exfil-002` |
+| Dangerous commands | `cmd` | regex | `cmd-001` |
+| SQL injection | `sql` | pattern | `sql-001` |
+| Supply chain | `sc` | pattern | `sc-002` |
+| General policies | `pol` | cel | `pol-001` |
+| Privilege escalation | `pe` | cel | `pe-003` |
+| Model manipulation | `mm` | cel | `mm-002` |
+| Rate limiting | `rl` | sql | `rl-001` |
+| Dangerous tools | `dt` | sigma | `dt-001` |
+| Prompt injection | `pi` | sigma | `pi-002` |
+| Reconnaissance | `recon` | sigma | `recon-003` |
+| Shadow IT | `shadow` | sigma | `shadow-001` |
 
 ---
 
@@ -55,16 +66,16 @@ Detects attempts to extract system prompts, jailbreak the model, or override saf
 
 Redacts or blocks common secret patterns before they leak through tool calls or responses.
 
-**Engine:** Regex | **Evaluator:** `secrets-scanner` | **Stage:** `tool.before`, `tool.after`
+**Engine:** Regex | **Evaluator:** `secrets-scanner` | **File:** `rules/regex/secrets.yaml` | **Stage:** `tool.before`, `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-sec-001 | AWS Access Key | Detects AWS access key IDs starting with AKIA | Redact |
-| regex-sec-002 | AWS Secret Key | Detects AWS secret access keys in configuration or environment variables | Redact |
-| regex-sec-003 | GitHub Personal Access Token | Detects GitHub personal access tokens (classic format) | Redact |
-| regex-sec-004 | GitHub Fine-Grained Token | Detects GitHub fine-grained personal access tokens | Redact |
-| regex-sec-005 | Generic API Key | Detects generic API keys and secret keys in assignments | Redact |
-| regex-sec-006 | Private Key Block | Detects PEM-encoded private key blocks | Block |
+| sec-001 | AWS Access Key | Detects AWS access key IDs starting with AKIA | Redact |
+| sec-002 | AWS Secret Key | Detects AWS secret access keys in configuration or environment variables | Redact |
+| sec-003 | GitHub Personal Access Token | Detects GitHub personal access tokens (classic format) | Redact |
+| sec-004 | GitHub Fine-Grained Token | Detects GitHub fine-grained personal access tokens | Redact |
+| sec-005 | Generic API Key | Detects generic API keys and secret keys in assignments | Redact |
+| sec-006 | Private Key Block | Detects PEM-encoded private key blocks | Block |
 
 **False-positive notes:** The generic API key pattern may match configuration documentation that contains placeholder keys. Use the `fields` option to restrict matching to specific fields if needed.
 
@@ -74,15 +85,15 @@ Redacts or blocks common secret patterns before they leak through tool calls or 
 
 Redacts personally identifiable information from tool outputs before they reach the user or external systems.
 
-**Engine:** Regex | **Evaluator:** `pii-scanner` | **Stage:** `tool.after`
+**Engine:** Regex | **Evaluator:** `pii-scanner` | **File:** `rules/regex/pii.yaml` | **Stage:** `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-pii-001 | Social Security Number | Detects US Social Security Numbers in NNN-NN-NNNN format | Redact |
-| regex-pii-002 | Credit Card - Visa | Detects Visa credit card numbers | Redact |
-| regex-pii-003 | Credit Card - Mastercard | Detects Mastercard credit card numbers | Redact |
-| regex-pii-004 | Credit Card - Amex | Detects American Express credit card numbers | Redact |
-| regex-pii-005 | US Phone Number | Detects US phone numbers in various formats | Redact |
+| pii-001 | Social Security Number | Detects US Social Security Numbers in NNN-NN-NNNN format | Redact |
+| pii-002 | Credit Card - Visa | Detects Visa credit card numbers | Redact |
+| pii-003 | Credit Card - Mastercard | Detects Mastercard credit card numbers | Redact |
+| pii-004 | Credit Card - Amex | Detects American Express credit card numbers | Redact |
+| pii-005 | US Phone Number | Detects US phone numbers in various formats | Redact |
 
 **False-positive notes:** The SSN pattern will match any `NNN-NN-NNNN` format, including some date formats and version numbers. The phone number pattern may match numeric sequences in technical output.
 
@@ -92,13 +103,13 @@ Redacts personally identifiable information from tool outputs before they reach 
 
 Detects encoded data and indicators of data being prepared for exfiltration.
 
-**Engine:** Regex | **Evaluator:** `data-exfiltration` | **Stage:** `tool.before`, `tool.after`
+**Engine:** Regex | **Evaluator:** `data-exfiltration` | **File:** `rules/regex/data-exfiltration.yaml` | **Stage:** `tool.before`, `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-exfil-001 | Base64-encoded secret indicator | Detects base64-encoded values following secret-like key names | Detect |
-| regex-exfil-002 | Long hex-encoded data block | Detects long hex-encoded strings that may indicate data exfiltration | Detect |
-| regex-exfil-003 | Data URI with base64 | Detects data URIs with large base64 payloads | Detect |
+| exfil-001 | Base64-encoded secret indicator | Detects base64-encoded values following secret-like key names | Detect |
+| exfil-002 | Long hex-encoded data block | Detects long hex-encoded strings that may indicate data exfiltration | Detect |
+| exfil-003 | Data URI with base64 | Detects data URIs with large base64 payloads | Detect |
 
 ---
 
@@ -106,24 +117,24 @@ Detects encoded data and indicators of data being prepared for exfiltration.
 
 Blocks dangerous shell commands before they execute. Covered by multiple engines for defense-in-depth.
 
-**Engine:** Regex | **Evaluator:** `dangerous-commands` | **Stage:** `tool.before`
+**Engine:** Regex | **Evaluator:** `dangerous-commands` | **File:** `rules/regex/dangerous-commands.yaml` | **Stage:** `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| regex-cmd-001 | Recursive delete root | Blocks recursive deletion of root filesystem | Block |
-| regex-cmd-002 | Format disk | Blocks filesystem formatting commands | Block |
-| regex-cmd-003 | Disk overwrite | Blocks raw disk writes via dd to device files | Block |
-| regex-cmd-004 | Chmod 777 recursive | Detects recursive permission changes to world-writable | Detect |
-| regex-cmd-005 | Curl pipe to shell | Blocks piping curl output directly to a shell interpreter | Block |
+| cmd-001 | Recursive delete root | Blocks recursive deletion of root filesystem | Block |
+| cmd-002 | Format disk | Blocks filesystem formatting commands | Block |
+| cmd-003 | Disk overwrite | Blocks raw disk writes via dd to device files | Block |
+| cmd-004 | Chmod 777 recursive | Blocks recursive permission changes to world-writable | Block |
+| cmd-005 | Curl pipe to shell | Blocks piping curl output directly to a shell interpreter | Block |
 
 **Engine:** CEL | **File:** `rules/cel/policies.yaml` | **Stage:** `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| cel-pol-001 | Block recursive file deletion | Prevents recursive file deletion via rm -r commands | Block |
-| cel-pol-002 | Block world-writable permissions | Prevents setting chmod 777 which makes files world-writable | Block |
-| cel-pol-003 | Detect sudo usage | Detects elevated privilege execution via sudo | Detect |
-| cel-pol-004 | Block environment variable dump | Detects environment variable dumps that may expose secrets | Detect |
+| pol-001 | Block recursive file deletion | Prevents recursive file deletion via rm -r commands | Block |
+| pol-002 | Block world-writable permissions | Prevents setting chmod 777 which makes files world-writable | Block |
+| pol-003 | Detect sudo usage | Detects elevated privilege execution via sudo | Detect |
+| pol-004 | Detect environment variable dump | Detects environment variable dumps that may expose secrets | Detect |
 
 ---
 
@@ -135,15 +146,15 @@ Detects attempts to gain elevated permissions.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| cel-pe-001 | Block sudo privilege escalation | Blocks privilege escalation via sudo command | Block |
-| cel-pe-002 | Block user switching | Blocks switching to another user via su command | Block |
-| cel-pe-003 | Block pkexec privilege escalation | Blocks privilege escalation via pkexec | Block |
-| cel-pe-004 | Block doas privilege escalation | Blocks privilege escalation via doas command | Block |
-| cel-pe-005 | Block chown to root | Blocks changing file ownership to root | Block |
-| cel-pe-006 | Block setuid bit | Blocks setting the setuid bit on files | Block |
-| cel-pe-007 | Block sudoers modification | Blocks modifying the sudoers configuration | Block |
+| pe-001 | Block sudo privilege escalation | Blocks privilege escalation via sudo command | _Disabled by default_ |
+| pe-002 | Block user switching | Blocks switching to another user via su command | Block |
+| pe-003 | Block pkexec privilege escalation | Blocks privilege escalation via pkexec | Block |
+| pe-004 | Block doas privilege escalation | Blocks privilege escalation via doas command | Block |
+| pe-005 | Block chown to root | Blocks changing file ownership to root | Block |
+| pe-006 | Block setuid bit | Blocks setting the setuid bit on files | Block |
+| pe-007 | Block sudoers modification | Blocks modifying the sudoers configuration | Block |
 
-**False-positive notes:** Agents that legitimately need `sudo` for package installation or system configuration should have the `warn-sudo` detect-only rule from `policies.yaml` rather than the hard `block-sudo`.
+**Default sudo policy:** `pe-001` ships commented out so `sudo` is detect-only via `pol-003` (Dangerous Commands section). To enforce a hard block, uncomment `pe-001` in `rules/cel/privilege-escalation.yaml` and consider removing `pol-003` to avoid duplicate metadata in the audit log.
 
 ---
 
@@ -201,10 +212,10 @@ Detects attempts to tamper with model parameters or redefine tool behavior.
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| cel-mm-001 | Block system prompt injection via tools | Detects attempts to modify the system prompt through tool calls | Block |
-| cel-mm-002 | Detect temperature override attempt | Detects attempts to modify the model temperature parameter | Detect |
-| cel-mm-003 | Detect tool definitions tampering | Detects attempts to modify or redefine available tool definitions | Detect |
-| cel-mm-004 | Detect max_tokens override attempt | Detects attempts to modify the max_tokens parameter | Detect |
+| mm-001 | Block system prompt injection via tools | Detects attempts to modify the system prompt through tool calls | Block |
+| mm-002 | Detect temperature override attempt | Detects attempts to modify the model temperature parameter | Detect |
+| mm-003 | Detect tool definitions tampering | Detects attempts to modify or redefine available tool definitions | Detect |
+| mm-004 | Detect max_tokens override attempt | Detects attempts to modify the max_tokens parameter | Detect |
 
 ---
 
@@ -212,14 +223,14 @@ Detects attempts to tamper with model parameters or redefine tool behavior.
 
 Blocks untrusted package installs and dependency confusion attacks.
 
-**Engine:** Pattern | **Evaluator:** `supply-chain` | **Stage:** `tool.before`
+**Engine:** Pattern | **Evaluator:** `supply-chain` | **File:** `rules/pattern/supply-chain.yaml` | **Stage:** `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| pat-sc-001 | Pip install from custom index | Blocks pip installs from non-default package indexes | Block |
-| pat-sc-002 | Npm install from custom registry | Blocks npm installs from non-default registries | Block |
-| pat-sc-003 | Wget pipe to shell | Blocks piping wget output directly to a shell interpreter | Block |
-| pat-sc-004 | Gem install from custom source | Blocks gem installs from non-default sources | Block |
+| sc-001 | Pip install from custom index | Blocks pip installs from non-default package indexes | Block |
+| sc-002 | Npm install from custom registry | Blocks npm installs from non-default registries | Block |
+| sc-003 | Wget pipe to shell | Blocks piping wget output directly to a shell interpreter | Block |
+| sc-004 | Gem install from custom source | Blocks gem installs from non-default sources | Block |
 
 ---
 
@@ -227,11 +238,11 @@ Blocks untrusted package installs and dependency confusion attacks.
 
 Detects common SQL injection patterns in messages and tool arguments.
 
-**Engine:** Pattern | **Evaluator:** `sql-keywords` | **Stage:** `message.before`, `tool.before`
+**Engine:** Pattern | **Evaluator:** `sql-keywords` | **File:** `rules/pattern/sql-keywords.yaml` | **Stage:** `message.before`, `tool.before`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| pat-sql-001 | SQL destructive keywords | Detects common SQL injection and destructive query patterns | Detect |
+| sql-001 | SQL destructive keywords | Detects common SQL injection and destructive query patterns | Detect |
 
 **False-positive notes:** Database administration agents will regularly trigger this rule. Switch to `allow` for trusted database management workflows.
 
@@ -241,12 +252,12 @@ Detects common SQL injection patterns in messages and tool arguments.
 
 Detects abnormal tool usage rates that may indicate automated abuse or infinite loops.
 
-**Engine:** SQL | **Evaluator:** `rate-limits` | **Stage:** `tool.before`, `tool.after`
+**Engine:** SQL | **Evaluator:** `rate-limits` | **File:** `rules/sql/rate-limits.yaml` | **Stage:** `tool.before`, `tool.after`
 
 | ID | Title | Description | Action |
 |----|-------|-------------|--------|
-| sql-rl-001 | High tool call rate | Detects unusually high tool call rates per session | Detect |
-| sql-rl-002 | Repeated tool abuse | Detects repeated calls to the same tool in a short window | Detect |
+| rl-001 | High tool call rate | Detects unusually high tool call rates per session | Detect |
+| rl-002 | Repeated tool abuse | Detects repeated calls to the same tool in a short window | Detect |
 
 ---
 
@@ -254,9 +265,23 @@ Detects abnormal tool usage rates that may indicate automated abuse or infinite 
 
 All custom rules should include the three standard metadata fields: `id`, `title`, and `description`.
 
+### Where rules live
+
+Three loading paths exist; in order of preference:
+
+| Source | Used by | Behavior |
+|--------|---------|----------|
+| `rules/` auto-discovery | `regex`, `pattern`, `cel`, `sql`, `sigma` | Default. The loader walks `./rules/<engine>/*.yaml` and registers one evaluator per file. Evaluator name = filename stem. Stages = engine-typical defaults unless the file carries an `evaluator: { stages: [...] }` header. Override the root with `rules_dir:` in `parallax.yaml`. |
+| `rules:` (inline) | all | Rules embedded under `evaluators:` in `parallax.yaml`. Used for the shipped starter set. |
+| `rules_file: <path>`, `rules_dir: <path>` on an inline evaluator | `regex`, `pattern`, `cel`, `sql`, `sigma` | Explicit external references — appended to that evaluator's `rules:` list at load time. |
+
+When an inline rule id collides with an id from the `rules/` tree, the rules-tree version wins (so the shipped starter rules in `parallax.yaml` are transparently upgraded when the curated tree is present).
+
+To suppress a specific evaluator entirely, add its name (inline or auto-discovered) to the top-level `disabled:` list in `parallax.yaml`.
+
 ### Adding a Sigma rule
 
-Create a `.yaml` file in `rules/sigma/`. It will be auto-loaded:
+Drop a `.yaml` file in `rules/sigma/` — the `sigma-threats` evaluator auto-loads it:
 
 ```yaml
 title: My custom rule
@@ -274,10 +299,10 @@ action: block    # block, detect, redact, or allow
 
 ### Adding a CEL rule
 
-Add to an existing file in `rules/cel/` or create a new file and reference it in `config.yaml`:
+Append to one of the existing files in `rules/cel/`, or drop a new `rules/cel/<name>.yaml`. A bare list works for default stages; add an `evaluator:` header to override stages or the evaluator name. Pick a category prefix (`pol`, `pe`, `mm`, or your own) and a free numeric slot:
 
 ```yaml
-- id: cel-custom-001
+- id: pol-099
   title: My custom CEL rule
   description: Description of what this rule detects
   expr: 'tool_name == "exec" && tool_args_command.contains("dangerous")'
@@ -287,46 +312,43 @@ Add to an existing file in `rules/cel/` or create a new file and reference it in
 
 ### Adding a regex rule
 
-Add to an evaluator block in `config.yaml`:
+Append to one of the existing files in `rules/regex/`, or drop a new `rules/regex/<name>.yaml`. Pick a category prefix (`sec`, `pii`, `exfil`, `cmd`, or your own) and a free numeric slot:
 
 ```yaml
-rules:
-  - id: regex-custom-001
-    title: My pattern
-    description: Detects a dangerous regex pattern in tool arguments
-    pattern: "dangerous-regex-here"
-    action: block           # block, redact, detect, allow
-    fields: [tool_args.command]  # optional: target specific fields
+- id: cmd-099
+  title: My pattern
+  description: Detects a dangerous regex pattern in tool arguments
+  pattern: "dangerous-regex-here"
+  action: block               # block, redact, detect, allow
+  fields: [tool_args.command] # optional: target specific fields
 ```
 
 ### Adding a pattern rule
 
-Add to a pattern evaluator block in `config.yaml`:
+Append to a file in `rules/pattern/`, or drop a new file. Pick a category prefix (`sql`, `sc`, or your own) and a free numeric slot:
 
 ```yaml
-rules:
-  - id: pat-custom-001
-    title: My keyword rule
-    description: Detects dangerous keywords in tool arguments
-    keywords: ["dangerous-keyword"]
-    action: block
+- id: sc-099
+  title: My keyword rule
+  description: Detects dangerous keywords in tool arguments
+  keywords: ["dangerous-keyword"]
+  action: block
 ```
 
 ### Adding a SQL rule
 
-Add to the `rate-limits` evaluator in `config.yaml`:
+Append to `rules/sql/rate-limits.yaml`, or drop a new `rules/sql/<name>.yaml`. Use the `rl` category prefix (or define a new one):
 
 ```yaml
-rules:
-  - id: sql-custom-001
-    title: My aggregate rule
-    description: Detects abnormal event patterns using SQL aggregation
-    query: >
-      SELECT COUNT(*) as cnt FROM events
-      WHERE session_id = :session_id AND timestamp > :now - 120
-    condition: "cnt > 10"
-    action: detect
-    reason: "What this means"
+- id: rl-099
+  title: My aggregate rule
+  description: Detects abnormal event patterns using SQL aggregation
+  query: >
+    SELECT COUNT(*) as cnt FROM events
+    WHERE session_id = :session_id AND timestamp > :now - 120
+  condition: "cnt > 10"
+  action: detect
+  reason: "What this means"
 ```
 
 Available SQL parameters: `:session_id`, `:user_id`, `:channel`, `:tool_name`, `:now`

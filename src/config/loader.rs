@@ -1,9 +1,18 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use tracing::{error, info, warn};
 
 use crate::config::schema::{EvaluatorConfig, PlatformConfig};
+
+/// Evaluator types whose rule loading from external files is handled here
+/// (i.e. `rules_file` / `rules_dir` produce flat rule lists merged into `rules`).
+/// Sigma is excluded because it uses multi-document YAML with its own loader.
+const FILE_BACKED_TYPES: &[&str] = &["regex", "pattern", "cel", "sql"];
+
+/// Engine types the rules-tree auto-discovery walks. Each one is expected
+/// to live as a subdirectory under `<rules_dir>/<engine>/`.
+const DISCOVERY_ENGINES: &[&str] = &["regex", "pattern", "cel", "sql", "sigma"];
 use crate::engine::chain::EvaluatorChain;
 use crate::evaluators::cel_eval::CELEvaluator;
 use crate::evaluators::pattern_eval::PatternEvaluator;
@@ -11,12 +20,21 @@ use crate::evaluators::regex_eval::RegexEvaluator;
 use crate::evaluators::sigma_eval::SigmaEvaluator;
 use crate::evaluators::sql_eval::SQLEvaluator;
 
-const DEFAULT_CONFIG_PATHS: &[&str] = &[
-    "parallax.yaml",
-    "parallax.yml",
-    "config.yaml",
-    "config.yml",
-];
+const DEFAULT_CONFIG_PATHS: &[&str] = &["parallax.yaml", "parallax.yml"];
+
+/// Engine-typical default stages used when an auto-discovered rule file
+/// does not carry its own `evaluator: { stages: [...] }` header.
+fn default_stages_for(engine: &str) -> Vec<String> {
+    let stages: &[&str] = match engine {
+        "regex" => &["tool.before", "tool.after"],
+        "pattern" => &["tool.before"],
+        "cel" => &["tool.before"],
+        "sigma" => &["message.before", "tool.before", "tool.after"],
+        "sql" => &["tool.before", "tool.after"],
+        _ => &["tool.before", "tool.after"],
+    };
+    stages.iter().map(|s| (*s).to_string()).collect()
+}
 
 /// Find a config file. If `path` is provided, use it directly.
 /// Otherwise, search the default locations.
@@ -41,7 +59,7 @@ pub fn find_config(path: Option<&str>) -> Result<PathBuf, String> {
         "No config file found in the current directory.\n\
          Searched for: {}\n\n\
          To get started, run from the parallax repo directory or specify a config path:\n  \
-         parallax serve -c /path/to/config.yaml",
+         parallax serve -c /path/to/parallax.yaml",
         DEFAULT_CONFIG_PATHS.join(", ")
     ))
 }
@@ -111,10 +129,340 @@ fn load_evaluator_dir(dir: &Path, config_root: &Path) -> Vec<EvaluatorConfig> {
     evaluators
 }
 
+/// Load a YAML file expected to contain a sequence of rule entries.
+/// Returns the sequence on success; warns and returns an empty vec on any failure.
+fn load_rules_file(path: &Path) -> Vec<serde_yaml::Value> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(path = %path.display(), error = %e, "Failed to read rules file");
+            return Vec::new();
+        }
+    };
+    let val: serde_yaml::Value = match serde_yaml::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(path = %path.display(), error = %e, "Failed to parse rules YAML");
+            return Vec::new();
+        }
+    };
+    match val {
+        serde_yaml::Value::Sequence(seq) => seq,
+        serde_yaml::Value::Null => Vec::new(),
+        other => {
+            warn!(
+                path = %path.display(),
+                kind = ?std::mem::discriminant(&other),
+                "Rules file does not contain a YAML sequence, ignoring"
+            );
+            Vec::new()
+        }
+    }
+}
+
+/// Load all `.yaml` / `.yml` rule files from a directory, concatenating
+/// their rule lists in sorted filename order.
+fn load_rules_dir(dir: &Path) -> Vec<serde_yaml::Value> {
+    if !dir.is_dir() {
+        warn!(path = %dir.display(), "rules_dir not found, skipping");
+        return Vec::new();
+    }
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.extension()
+                        .map(|ext| ext == "yaml" || ext == "yml")
+                        .unwrap_or(false)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    entries.sort();
+
+    let mut rules = Vec::new();
+    for path in entries {
+        rules.extend(load_rules_file(&path));
+    }
+    rules
+}
+
+/// Resolve a possibly-relative path against the config root.
+fn resolve_path(p: &str, config_root: &Path) -> PathBuf {
+    let pb = PathBuf::from(p);
+    if pb.is_absolute() {
+        pb
+    } else {
+        config_root.join(pb)
+    }
+}
+
+/// For evaluator types that support a flat rule list, expand `rules_file`
+/// and `rules_dir` references (held in `extra`) into the evaluator's
+/// inline `rules` list. Inline rules win; file-loaded rules are appended.
+///
+/// Sigma is intentionally skipped: it consumes `rules_dir` directly via its
+/// own multi-document loader.
+fn expand_rule_sources(evaluators: &mut [EvaluatorConfig], config_root: &Path) {
+    for ec in evaluators.iter_mut() {
+        if !FILE_BACKED_TYPES.contains(&ec.eval_type.as_str()) {
+            continue;
+        }
+
+        let mut loaded: Vec<serde_yaml::Value> = Vec::new();
+
+        if let Some(rules_file) = ec
+            .extra
+            .remove("rules_file")
+            .and_then(|v| v.as_str().map(str::to_string))
+        {
+            let path = resolve_path(&rules_file, config_root);
+            let entries = load_rules_file(&path);
+            info!(
+                name = %ec.name,
+                path = %path.display(),
+                count = entries.len(),
+                "Loaded rules from rules_file"
+            );
+            loaded.extend(entries);
+        }
+
+        if let Some(rules_dir) = ec.rules_dir.clone() {
+            let path = resolve_path(&rules_dir, config_root);
+            let entries = load_rules_dir(&path);
+            info!(
+                name = %ec.name,
+                path = %path.display(),
+                count = entries.len(),
+                "Loaded rules from rules_dir"
+            );
+            loaded.extend(entries);
+            // Consumed by the generic loader; clear so evaluator construction
+            // doesn't try to re-interpret it.
+            ec.rules_dir = None;
+        }
+
+        if !loaded.is_empty() {
+            ec.rules.extend(loaded);
+        }
+    }
+}
+
+/// Auto-discover a rules tree at `<rules_root>/<engine>/`, producing one
+/// `EvaluatorConfig` per rule file (regex/pattern/cel/sql) and one combined
+/// sigma evaluator that points the existing Sigma loader at `<rules_root>/sigma/`.
+///
+/// Each non-Sigma rule file may either be:
+///   - a bare YAML sequence of rule entries (no header), or
+///   - a YAML mapping with `evaluator: { name?, stages?, enabled? }` and `rules: [...]`.
+///
+/// Missing fields fall back to engine-typical defaults; missing files / dirs
+/// are silent.
+fn discover_rules_tree(rules_root: &Path) -> Vec<EvaluatorConfig> {
+    if !rules_root.is_dir() {
+        return Vec::new();
+    }
+
+    let mut discovered = Vec::new();
+
+    for engine in DISCOVERY_ENGINES {
+        let engine_dir = rules_root.join(engine);
+        if !engine_dir.is_dir() {
+            continue;
+        }
+
+        if *engine == "sigma" {
+            // Single evaluator that delegates to the existing Sigma loader.
+            discovered.push(EvaluatorConfig {
+                name: "sigma-threats".into(),
+                eval_type: "sigma".into(),
+                enabled: true,
+                stages: default_stages_for("sigma"),
+                rules: Vec::new(),
+                rules_dir: Some(engine_dir.to_string_lossy().into_owned()),
+                extra: Default::default(),
+            });
+            info!(path = %engine_dir.display(), "Auto-discovered sigma evaluator");
+            continue;
+        }
+
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&engine_dir)
+            .map(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| {
+                        p.extension()
+                            .map(|ext| ext == "yaml" || ext == "yml")
+                            .unwrap_or(false)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        files.sort();
+
+        for path in files {
+            match parse_rule_file(&path, engine) {
+                Some(ec) => {
+                    info!(
+                        name = %ec.name,
+                        engine = engine,
+                        rules = ec.rules.len(),
+                        path = %path.display(),
+                        "Auto-discovered evaluator from rules file"
+                    );
+                    discovered.push(ec);
+                }
+                None => warn!(
+                    path = %path.display(),
+                    engine = engine,
+                    "Skipping unparseable rule file"
+                ),
+            }
+        }
+    }
+
+    discovered
+}
+
+/// Parse a single rule file into an `EvaluatorConfig`. Accepts either:
+///   - a YAML sequence of rule entries (bare list), or
+///   - a YAML mapping with an `evaluator:` header and a `rules:` body.
+fn parse_rule_file(path: &Path, engine: &str) -> Option<EvaluatorConfig> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(path = %path.display(), error = %e, "Failed to read rule file");
+            return None;
+        }
+    };
+    let val: serde_yaml::Value = match serde_yaml::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(path = %path.display(), error = %e, "Failed to parse rule YAML");
+            return None;
+        }
+    };
+
+    let default_name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unnamed")
+        .to_string();
+
+    match val {
+        serde_yaml::Value::Sequence(rules) => Some(EvaluatorConfig {
+            name: default_name,
+            eval_type: engine.to_string(),
+            enabled: true,
+            stages: default_stages_for(engine),
+            rules,
+            rules_dir: None,
+            extra: Default::default(),
+        }),
+        serde_yaml::Value::Mapping(map) => {
+            let header = map
+                .get(serde_yaml::Value::String("evaluator".into()))
+                .and_then(|v| v.as_mapping());
+            let name = header
+                .and_then(|m| m.get(serde_yaml::Value::String("name".into())))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or(default_name);
+            let enabled = header
+                .and_then(|m| m.get(serde_yaml::Value::String("enabled".into())))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let stages = header
+                .and_then(|m| m.get(serde_yaml::Value::String("stages".into())))
+                .and_then(|v| v.as_sequence())
+                .map(|seq| {
+                    seq.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_else(|| default_stages_for(engine));
+            let rules = map
+                .get(serde_yaml::Value::String("rules".into()))
+                .and_then(|v| v.as_sequence())
+                .cloned()
+                .unwrap_or_default();
+            Some(EvaluatorConfig {
+                name,
+                eval_type: engine.to_string(),
+                enabled,
+                stages,
+                rules,
+                rules_dir: None,
+                extra: Default::default(),
+            })
+        }
+        serde_yaml::Value::Null => None,
+        _ => None,
+    }
+}
+
+/// Extract the set of rule ids from a discovered-evaluators list.
+fn collect_rule_ids(evaluators: &[EvaluatorConfig]) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    for ec in evaluators {
+        for rule in &ec.rules {
+            if let Some(id) = rule
+                .as_mapping()
+                .and_then(|m| m.get(serde_yaml::Value::String("id".into())))
+                .and_then(|v| v.as_str())
+            {
+                ids.insert(id.to_string());
+            }
+        }
+    }
+    ids
+}
+
+/// Apply "rules-tree wins" semantics: remove inline rules whose `id` also
+/// appears in the discovered set. Operates on a slice of inline evaluators.
+fn drop_overridden_inline_rules(
+    inline: &mut [EvaluatorConfig],
+    overridden_ids: &HashSet<String>,
+) {
+    if overridden_ids.is_empty() {
+        return;
+    }
+    for ec in inline.iter_mut() {
+        ec.rules.retain(|rule| {
+            let id_opt = rule
+                .as_mapping()
+                .and_then(|m| m.get(serde_yaml::Value::String("id".into())))
+                .and_then(|v| v.as_str());
+            match id_opt {
+                Some(id) if overridden_ids.contains(id) => {
+                    info!(
+                        rule_id = id,
+                        evaluator = %ec.name,
+                        "Inline rule overridden by rules/ tree"
+                    );
+                    false
+                }
+                _ => true,
+            }
+        });
+    }
+}
+
 /// Load and validate the platform configuration from a YAML file.
 ///
-/// Merges inline evaluator definitions with any found in the `evaluators_dir`.
-/// Duplicate evaluator names are resolved last-definition-wins.
+/// Behaviour:
+///   1. Parse `parallax.yaml` for server/proxy/reporting + any inline evaluators.
+///   2. If `evaluators_dir` is set (or `./evaluators` exists), load full
+///      evaluator definitions from there (legacy path; unchanged).
+///   3. If `rules_dir` is set, or `./rules` exists next to the config file,
+///      auto-discover evaluators from `<rules_dir>/<engine>/*.yaml` using
+///      engine-default stages unless a file carries an `evaluator:` header.
+///   4. Inline rules whose `id` matches a discovered rule are dropped (the
+///      rules-tree version wins).
+///   5. Any evaluator whose name is in `disabled:` is removed.
+///   6. For evaluators using `rules_file` / `rules_dir` directly, expand
+///      those references into inline `rules` (skip sigma — it loads on its own).
 ///
 /// # Errors
 ///
@@ -128,7 +476,7 @@ pub fn load_config(path: Option<&str>) -> Result<PlatformConfig, String> {
     let mut config: PlatformConfig =
         serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse config: {e}"))?;
 
-    // Load evaluators from directory
+    // Legacy: full evaluator definitions from an evaluators/ directory.
     let eval_dir = config
         .evaluators_dir
         .as_deref()
@@ -141,11 +489,10 @@ pub fn load_config(path: Option<&str>) -> Result<PlatformConfig, String> {
             count = dir_evaluators.len(),
             "Loaded evaluators from directory"
         );
-        // Merge: inline first, then directory. Deduplicate by name (last wins).
         let mut merged: Vec<EvaluatorConfig> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
 
-        for ec in config.evaluators.into_iter().chain(dir_evaluators) {
+        for ec in config.evaluators.drain(..).chain(dir_evaluators) {
             if let Some(&idx) = seen.get(&ec.name) {
                 merged[idx] = ec.clone();
                 info!(name = %ec.name, "Evaluator overwritten by later definition");
@@ -156,6 +503,60 @@ pub fn load_config(path: Option<&str>) -> Result<PlatformConfig, String> {
         }
         config.evaluators = merged;
     }
+
+    // Auto-discover the rules tree (./rules or explicit rules_dir).
+    let rules_root = config
+        .rules_dir
+        .as_deref()
+        .map(|p| resolve_path(p, config_root))
+        .or_else(|| {
+            let default = config_root.join("rules");
+            if default.is_dir() {
+                Some(default)
+            } else {
+                None
+            }
+        });
+
+    if let Some(rules_root) = rules_root {
+        let discovered = discover_rules_tree(&rules_root);
+        if !discovered.is_empty() {
+            info!(
+                path = %rules_root.display(),
+                count = discovered.len(),
+                "Auto-discovered evaluators from rules tree"
+            );
+
+            // Inline rules with ids that the rules-tree also defines: drop.
+            let overridden = collect_rule_ids(&discovered);
+            drop_overridden_inline_rules(&mut config.evaluators, &overridden);
+
+            // Append discovered evaluators after inline ones.
+            config.evaluators.extend(discovered);
+        }
+    }
+
+    // Apply `disabled:` filter.
+    if !config.disabled.is_empty() {
+        let drop: HashSet<&str> = config.disabled.iter().map(String::as_str).collect();
+        let before = config.evaluators.len();
+        config.evaluators.retain(|ec| {
+            let keep = !drop.contains(ec.name.as_str());
+            if !keep {
+                info!(name = %ec.name, "Evaluator disabled by parallax.yaml `disabled:` list");
+            }
+            keep
+        });
+        if config.evaluators.len() != before {
+            info!(
+                removed = before - config.evaluators.len(),
+                "Suppressed evaluators per `disabled:` list"
+            );
+        }
+    }
+
+    // Expand external rule references for file-backed evaluator types.
+    expand_rule_sources(&mut config.evaluators, config_root);
 
     info!(
         evaluators = config.evaluators.len(),
@@ -241,6 +642,160 @@ evaluators:
     }
 
     #[test]
+    fn test_load_rules_file_returns_sequence() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rules.yaml");
+        std::fs::write(
+            &path,
+            r#"
+- id: r-001
+  title: one
+  pattern: foo
+  action: detect
+- id: r-002
+  title: two
+  pattern: bar
+  action: block
+"#,
+        )
+        .unwrap();
+
+        let rules = load_rules_file(&path);
+        assert_eq!(rules.len(), 2);
+    }
+
+    #[test]
+    fn test_load_rules_file_missing_returns_empty() {
+        let rules = load_rules_file(Path::new("/nonexistent/rules.yaml"));
+        assert!(rules.is_empty());
+    }
+
+    #[test]
+    fn test_load_rules_dir_concatenates_sorted() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("b.yaml"),
+            "- {id: b-001, title: b, pattern: b, action: detect}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("a.yaml"),
+            "- {id: a-001, title: a, pattern: a, action: detect}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("ignored.txt"),
+            "not yaml, should be skipped",
+        )
+        .unwrap();
+
+        let rules = load_rules_dir(dir.path());
+        assert_eq!(rules.len(), 2);
+        let first_id = rules[0]
+            .as_mapping()
+            .and_then(|m| m.get(serde_yaml::Value::String("id".into())))
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(first_id, "a-001");
+    }
+
+    #[test]
+    fn test_expand_rule_sources_loads_rules_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let rules_path = dir.path().join("cel-rules.yaml");
+        std::fs::write(
+            &rules_path,
+            r#"
+- id: cel-001
+  title: t
+  expr: 'tool_name == "exec"'
+  action: block
+"#,
+        )
+        .unwrap();
+
+        let mut evals = vec![EvaluatorConfig {
+            name: "cel-test".into(),
+            eval_type: "cel".into(),
+            enabled: true,
+            stages: vec!["tool.before".into()],
+            rules: vec![],
+            rules_dir: None,
+            extra: [(
+                "rules_file".to_string(),
+                serde_yaml::Value::String("cel-rules.yaml".into()),
+            )]
+            .into_iter()
+            .collect(),
+        }];
+
+        expand_rule_sources(&mut evals, dir.path());
+        assert_eq!(evals[0].rules.len(), 1);
+        assert!(!evals[0].extra.contains_key("rules_file"));
+    }
+
+    #[test]
+    fn test_expand_rule_sources_skips_sigma() {
+        let dir = tempfile::tempdir().unwrap();
+        let rules_dir = dir.path().join("sigma");
+        std::fs::create_dir(&rules_dir).unwrap();
+
+        let mut evals = vec![EvaluatorConfig {
+            name: "sig".into(),
+            eval_type: "sigma".into(),
+            enabled: true,
+            stages: vec!["tool.before".into()],
+            rules: vec![],
+            rules_dir: Some("sigma".into()),
+            extra: Default::default(),
+        }];
+
+        expand_rule_sources(&mut evals, dir.path());
+        // Sigma keeps its rules_dir intact so its own loader can use it.
+        assert_eq!(evals[0].rules_dir.as_deref(), Some("sigma"));
+        assert!(evals[0].rules.is_empty());
+    }
+
+    #[test]
+    fn test_expand_rule_sources_merges_inline_and_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let rules_path = dir.path().join("regex.yaml");
+        std::fs::write(
+            &rules_path,
+            r#"
+- id: r-file-001
+  title: from file
+  pattern: foo
+  action: detect
+"#,
+        )
+        .unwrap();
+
+        let inline: serde_yaml::Value = serde_yaml::from_str(
+            r#"{id: r-inline-001, title: inline, pattern: bar, action: detect}"#,
+        )
+        .unwrap();
+
+        let mut evals = vec![EvaluatorConfig {
+            name: "regex-test".into(),
+            eval_type: "regex".into(),
+            enabled: true,
+            stages: vec!["tool.before".into()],
+            rules: vec![inline],
+            rules_dir: None,
+            extra: [(
+                "rules_file".to_string(),
+                serde_yaml::Value::String("regex.yaml".into()),
+            )]
+            .into_iter()
+            .collect(),
+        }];
+
+        expand_rule_sources(&mut evals, dir.path());
+        assert_eq!(evals[0].rules.len(), 2);
+    }
+
+    #[test]
     fn test_build_chain_skips_disabled() {
         let yaml = r#"
 evaluators:
@@ -259,5 +814,228 @@ evaluators:
         let config: PlatformConfig = serde_yaml::from_str(yaml).unwrap();
         let chain = build_chain(&config);
         assert_eq!(chain.len(), 1);
+    }
+
+    /// Build a working rules tree on disk and verify auto-discovery
+    /// produces one evaluator per file with engine-default stages.
+    #[test]
+    fn test_discover_rules_tree_bare_lists_use_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let regex_dir = dir.path().join("regex");
+        std::fs::create_dir(&regex_dir).unwrap();
+        std::fs::write(
+            regex_dir.join("secrets.yaml"),
+            "- {id: sec-001, title: t, pattern: foo, action: redact}\n",
+        )
+        .unwrap();
+
+        let cel_dir = dir.path().join("cel");
+        std::fs::create_dir(&cel_dir).unwrap();
+        std::fs::write(
+            cel_dir.join("policies.yaml"),
+            "- {id: pol-001, title: t, expr: 'true', action: detect}\n",
+        )
+        .unwrap();
+
+        let discovered = discover_rules_tree(dir.path());
+        assert_eq!(discovered.len(), 2);
+
+        let secrets = discovered.iter().find(|e| e.name == "secrets").unwrap();
+        assert_eq!(secrets.eval_type, "regex");
+        assert_eq!(secrets.stages, default_stages_for("regex"));
+        assert_eq!(secrets.rules.len(), 1);
+
+        let policies = discovered.iter().find(|e| e.name == "policies").unwrap();
+        assert_eq!(policies.eval_type, "cel");
+        assert_eq!(policies.stages, default_stages_for("cel"));
+    }
+
+    /// Per-file `evaluator:` header overrides name + stages + enabled.
+    #[test]
+    fn test_discover_rules_tree_respects_header() {
+        let dir = tempfile::tempdir().unwrap();
+        let regex_dir = dir.path().join("regex");
+        std::fs::create_dir(&regex_dir).unwrap();
+        std::fs::write(
+            regex_dir.join("pii.yaml"),
+            r#"
+evaluator:
+  name: pii-scanner
+  stages: [tool.after]
+rules:
+  - id: pii-001
+    title: ssn
+    pattern: "\\d{3}-\\d{2}-\\d{4}"
+    action: redact
+"#,
+        )
+        .unwrap();
+
+        let discovered = discover_rules_tree(dir.path());
+        assert_eq!(discovered.len(), 1);
+        let pii = &discovered[0];
+        assert_eq!(pii.name, "pii-scanner");
+        assert_eq!(pii.stages, vec!["tool.after".to_string()]);
+        assert_eq!(pii.rules.len(), 1);
+    }
+
+    /// Sigma engine discovery emits a single evaluator that delegates to the
+    /// existing sigma loader via `rules_dir`.
+    #[test]
+    fn test_discover_rules_tree_sigma_emits_combined_evaluator() {
+        let dir = tempfile::tempdir().unwrap();
+        let sigma_dir = dir.path().join("sigma");
+        std::fs::create_dir(&sigma_dir).unwrap();
+        // empty dir is fine — the sigma loader scans it on its own.
+        let discovered = discover_rules_tree(dir.path());
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].eval_type, "sigma");
+        assert_eq!(discovered[0].name, "sigma-threats");
+        assert!(discovered[0].rules_dir.is_some());
+    }
+
+    /// When an inline rule id collides with a discovered one, drop the inline.
+    #[test]
+    fn test_drop_overridden_inline_rules() {
+        let inline_rule: serde_yaml::Value = serde_yaml::from_str(
+            r#"{id: sec-001, title: stub, pattern: foo, action: detect}"#,
+        )
+        .unwrap();
+        let keep_rule: serde_yaml::Value = serde_yaml::from_str(
+            r#"{id: sec-999, title: keep, pattern: bar, action: detect}"#,
+        )
+        .unwrap();
+
+        let mut inline = vec![EvaluatorConfig {
+            name: "starter".into(),
+            eval_type: "regex".into(),
+            enabled: true,
+            stages: vec!["tool.before".into()],
+            rules: vec![inline_rule, keep_rule],
+            rules_dir: None,
+            extra: Default::default(),
+        }];
+
+        let overridden: HashSet<String> = ["sec-001".to_string()].into_iter().collect();
+        drop_overridden_inline_rules(&mut inline, &overridden);
+
+        assert_eq!(inline[0].rules.len(), 1);
+        let kept_id = inline[0].rules[0]
+            .as_mapping()
+            .and_then(|m| m.get(serde_yaml::Value::String("id".into())))
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert_eq!(kept_id, "sec-999");
+    }
+
+    /// End-to-end: parallax.yaml + ./rules tree → loaded config has the
+    /// discovered evaluators and the inline stub rule is dropped.
+    #[test]
+    fn test_load_config_auto_discovers_rules_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg_path = dir.path().join("parallax.yaml");
+        std::fs::write(
+            &cfg_path,
+            r#"
+server:
+  host: 127.0.0.1
+  port: 9920
+evaluators:
+  - name: starter
+    type: regex
+    stages: [tool.before]
+    rules:
+      - id: sec-001
+        title: inline stub
+        pattern: STUB
+        action: detect
+"#,
+        )
+        .unwrap();
+
+        let regex_dir = dir.path().join("rules").join("regex");
+        std::fs::create_dir_all(&regex_dir).unwrap();
+        std::fs::write(
+            regex_dir.join("secrets.yaml"),
+            "- {id: sec-001, title: real, pattern: AKIA, action: redact}\n",
+        )
+        .unwrap();
+
+        let config = load_config(Some(cfg_path.to_str().unwrap())).unwrap();
+
+        // We have the inline `starter` evaluator (now empty because its only
+        // rule got overridden) plus the discovered `secrets` evaluator.
+        let starter = config.evaluators.iter().find(|e| e.name == "starter").unwrap();
+        assert!(starter.rules.is_empty(), "inline stub should be dropped");
+
+        let secrets = config.evaluators.iter().find(|e| e.name == "secrets").unwrap();
+        assert_eq!(secrets.rules.len(), 1);
+    }
+
+    /// `disabled:` removes both inline and discovered evaluators by name.
+    #[test]
+    fn test_load_config_disabled_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg_path = dir.path().join("parallax.yaml");
+        std::fs::write(
+            &cfg_path,
+            r#"
+disabled: [pii-scanner]
+"#,
+        )
+        .unwrap();
+
+        let regex_dir = dir.path().join("rules").join("regex");
+        std::fs::create_dir_all(&regex_dir).unwrap();
+        std::fs::write(
+            regex_dir.join("pii.yaml"),
+            r#"
+evaluator:
+  name: pii-scanner
+  stages: [tool.after]
+rules:
+  - id: pii-001
+    title: ssn
+    pattern: "\\d+"
+    action: redact
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            regex_dir.join("secrets.yaml"),
+            "- {id: sec-001, title: t, pattern: AKIA, action: redact}\n",
+        )
+        .unwrap();
+
+        let config = load_config(Some(cfg_path.to_str().unwrap())).unwrap();
+        assert!(config.evaluators.iter().any(|e| e.name == "secrets"));
+        assert!(!config.evaluators.iter().any(|e| e.name == "pii-scanner"));
+    }
+
+    /// When `./rules` is absent, only the inline evaluators survive.
+    #[test]
+    fn test_load_config_no_rules_dir_keeps_inline_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg_path = dir.path().join("parallax.yaml");
+        std::fs::write(
+            &cfg_path,
+            r#"
+evaluators:
+  - name: starter
+    type: regex
+    stages: [tool.before]
+    rules:
+      - id: sec-001
+        title: inline
+        pattern: AKIA
+        action: redact
+"#,
+        )
+        .unwrap();
+
+        let config = load_config(Some(cfg_path.to_str().unwrap())).unwrap();
+        assert_eq!(config.evaluators.len(), 1);
+        assert_eq!(config.evaluators[0].name, "starter");
+        assert_eq!(config.evaluators[0].rules.len(), 1);
     }
 }

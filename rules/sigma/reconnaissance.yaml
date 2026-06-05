@@ -1,6 +1,6 @@
 title: Sensitive file read - credentials and keys
 id: recon-001
-status: experimental
+status: stable
 description: Detects tool calls reading credential files, SSH keys, or secret stores
 priority: high
 logsource:
@@ -37,7 +37,7 @@ action: block
 ---
 title: System file reconnaissance
 id: recon-002
-status: experimental
+status: stable
 description: Detects reads of system files commonly targeted for information gathering
 priority: medium
 logsource:
@@ -65,7 +65,7 @@ action: block
 ---
 title: Cloud metadata endpoint access
 id: recon-003
-status: experimental
+status: stable
 description: Detects access to cloud instance metadata services used for credential theft
 priority: high
 logsource:
@@ -84,7 +84,7 @@ action: block
 ---
 title: Container and orchestration config access
 id: recon-004
-status: experimental
+status: stable
 description: Detects reads of Kubernetes, Docker, and container configuration files
 priority: medium
 logsource:

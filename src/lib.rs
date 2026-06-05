@@ -26,7 +26,7 @@
 //! use parallax::engine::context::{EvalContext, Stage};
 //!
 //! # #[tokio::main] async fn main() {
-//! let config = load_config(Some("config.yaml")).unwrap();
+//! let config = load_config(Some("parallax.yaml")).unwrap();
 //! let chain = build_chain(&config);
 //!
 //! // Build a context from an incoming agent event

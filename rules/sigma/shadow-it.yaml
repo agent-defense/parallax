@@ -1,6 +1,6 @@
 title: Container runtime operations
 id: shadow-001
-status: experimental
+status: stable
 description: Detects agent creating, running, or building containers without approval
 priority: medium
 logsource:
@@ -23,7 +23,7 @@ action: block
 ---
 title: Kubernetes cluster operations
 id: shadow-002
-status: experimental
+status: stable
 description: Detects agent deploying or modifying Kubernetes resources
 priority: medium
 logsource:
@@ -46,7 +46,7 @@ action: block
 ---
 title: Cloud infrastructure provisioning
 id: shadow-003
-status: experimental
+status: stable
 description: Detects agent provisioning or modifying cloud infrastructure
 priority: high
 logsource:
@@ -71,7 +71,7 @@ action: block
 ---
 title: User account management
 id: shadow-004
-status: experimental
+status: stable
 description: Detects agent creating or modifying system user accounts
 priority: medium
 logsource:

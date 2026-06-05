@@ -1,7 +1,28 @@
-# Parallax Starter Configuration
-# ===============================
-# Essential rules only — enough to block dangerous commands and redact secrets.
-# For the full 51-rule set covering 13 threat categories, use config.yaml.
+# Parallax Configuration
+# =======================
+# This is the single top-level config file. The Parallax server
+# auto-discovers `parallax.yaml` in the current working directory
+# (or use -c <path> to point at one explicitly).
+#
+# Sections:
+#   server      — HTTP bind address
+#   proxy       — Upstream LLM provider for proxy mode
+#   reporting   — Audit log + webhook configuration
+#   evaluators  — Inline starter rules (so the server is useful even
+#                 without a rules/ directory)
+#   rules_dir   — Optional. Defaults to ./rules next to this file when
+#                 that directory exists. Auto-discovers every file under
+#                 <rules_dir>/<engine>/*.yaml.
+#   disabled    — Optional. Suppress specific evaluators by name.
+#
+# Rule resolution:
+#   - Inline `evaluators:` below are loaded first.
+#   - If a rules/ tree is present, every file under it is auto-discovered
+#     with engine-typical default stages (override per-file via an
+#     `evaluator: { stages: [...] }` header).
+#   - When an inline rule id collides with a discovered rule id, the
+#     discovered version wins (so dropping a rules/ tree in gives you
+#     the curated set, not the stub).
 
 server:
   host: "127.0.0.1"
@@ -14,51 +35,55 @@ server:
 
 reporting:
   log_file: ./logs/audit.jsonl
+  # Uncomment to enable webhook reporting to SIEM, Slack, or PagerDuty:
+  # webhook_url: https://your-siem.example.com/webhook
+  # webhook_events: [block, redact]
 
+# Optional: point at a custom rules tree. If unset and ./rules exists
+# next to this file, it is auto-discovered.
+# rules_dir: ./rules
+
+# Optional: suppress specific evaluators by name (matches both inline
+# evaluators below and rules/-discovered ones).
+# disabled:
+#   - pii-scanner
+
+# Minimal essentials so a bare `parallax serve` (no rules/ directory)
+# still blocks the obvious. When the rules/ tree is present, these ids
+# are overridden by the curated versions there.
 evaluators:
-  - name: secrets-scanner
+  - name: starter-secrets
     type: regex
     stages: [tool.before, tool.after]
     rules:
-      - id: regex-sec-001
+      - id: sec-001
         title: AWS Access Key
         description: Detects AWS access key IDs starting with AKIA
         pattern: "AKIA[0-9A-Z]{16}"
         action: redact
         priority: high
-      - id: regex-sec-003
-        title: GitHub PAT
-        description: Detects GitHub personal access tokens (classic format)
-        pattern: "ghp_[A-Za-z0-9]{36}"
-        action: redact
-        priority: high
-      - id: regex-sec-006
+      - id: sec-006
         title: Private Key Block
         description: Detects PEM-encoded private key blocks
         pattern: "-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
         action: block
         priority: high
 
-  - name: dangerous-commands
+  - name: starter-dangerous-commands
     type: regex
     stages: [tool.before]
     rules:
-      - id: regex-cmd-001
-        title: Recursive delete
+      - id: cmd-001
+        title: Recursive delete root
         description: Blocks recursive deletion of root filesystem
         pattern: "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\\s+/"
         action: block
         priority: high
         fields: [tool_args.command]
-      - id: regex-cmd-005
+      - id: cmd-005
         title: Curl pipe to shell
         description: Blocks piping curl output directly to a shell interpreter
         pattern: "curl\\s+.*\\|\\s*(bash|sh|zsh)"
         action: block
         priority: high
         fields: [tool_args.command]
-
-  - name: sigma-threats
-    type: sigma
-    stages: [message.before, tool.before, tool.after]
-    rules_dir: ./rules/sigma

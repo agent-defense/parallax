@@ -102,7 +102,7 @@ pub fn setup(host: &str, port: u16) {
     println!("Done. Parallax hooks written to {}", path.display());
     println!();
     println!("Start the evaluation server with:");
-    println!("  parallax serve -c config.yaml");
+    println!("  parallax serve");
 }
 
 /// Remove the Parallax hooks from the Codex config (`~/.codex/config.toml`).

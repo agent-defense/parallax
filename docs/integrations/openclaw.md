@@ -10,7 +10,7 @@ Proxy mode routes all OpenClaw-to-Anthropic traffic through Parallax. No code ch
 
 ```bash
 parallax setup openclaw
-parallax serve --mode proxy -c config.yaml
+parallax serve --mode proxy
 ```
 
 This registers a custom provider in OpenClaw's config that points at the Parallax proxy, copies the Anthropic API key, and disables the server-mode integration to prevent double-evaluation.
@@ -40,7 +40,7 @@ Server mode installs a lightweight TypeScript integration that forwards OpenClaw
 ```bash
 openclaw plugins install --dangerously-force-unsafe-install --link ./integrations/openclaw
 openclaw plugins enable parallax-security
-parallax serve -c config.yaml
+parallax serve
 ```
 
 ### Configuration

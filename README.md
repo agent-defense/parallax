@@ -22,7 +22,7 @@
 - **Single binary, zero runtime dependencies** -- `cargo build --release` produces one static executable. No Python, no JVM, no containers required.
 - **Microsecond evaluation** -- the evaluator chain runs in cost order and short-circuits on the first `block`. Typical decisions complete in under 0.2 ms.
 - **Framework-agnostic** -- works with any agent system that can make HTTP calls. First-class integrations for OpenClaw and Claude Code; LangChain, CrewAI, and OpenAI Agents SDK are on the roadmap.
-- **51 rules out of the box** -- ships with rules covering 13 threat categories: prompt injection, reconnaissance, privilege escalation, PII leakage, supply chain attacks, data exfiltration, and more.
+- **54 rules out of the box** -- ships with rules covering 13 threat categories: prompt injection, reconnaissance, privilege escalation, PII leakage, supply chain attacks, data exfiltration, and more.
 - **Five evaluator engines** -- regex, keyword pattern, Sigma, CEL expressions, and SQL-based temporal analysis. Mix and match for layered defense.
 
 ## ⚙️ How It Works
@@ -55,10 +55,12 @@ Requires [Rust](https://rustup.rs/) 1.70+. No other dependencies.
 ./parallax serve
 ```
 
-This auto-discovers `parallax.yaml` (the starter config with essential rules). For the full 51-rule set:
+This auto-discovers `parallax.yaml` in the current directory. If a `rules/` directory sits next to it, the full curated rule set under [`rules/`](rules/) is auto-discovered too (one evaluator per file, engine-typical default stages). Drop `rules/` and only the inline starter rules in `parallax.yaml` load — useful for a stripped-down install.
+
+To point at a config in another location:
 
 ```bash
-./parallax serve -c config.yaml
+./parallax serve -c /path/to/parallax.yaml
 ```
 
 ### 3. Test it
@@ -100,7 +102,7 @@ See [docs/RULES.md](docs/RULES.md) for the full reference.
 
 ## 📝 Configuration
 
-One YAML file, three sections:
+One YAML file, four sections.
 
 ### Server
 
@@ -119,45 +121,69 @@ reporting:
   webhook_events: [block, redact]       # Filter which decisions to send
 ```
 
-### Evaluators
+### Evaluators (inline starter rules)
 
-Evaluators are the decision rules. Each has a `name`, `type`, the `stages` it applies to, and `rules`:
+Inline evaluators are short, hand-picked rules that ship in [`parallax.yaml`](parallax.yaml) so a bare `parallax serve` (no rules tree) still blocks the obvious. Each has a `name`, `type`, the `stages` it applies to, and inline `rules`:
 
 ```yaml
 evaluators:
-  - name: secrets-scanner
-    type: regex
-    stages: [tool.before, tool.after]
-    rules:
-      - id: regex-sec-001
-        title: AWS Access Key
-        description: Detects AWS access key IDs starting with AKIA
-        pattern: "AKIA[0-9A-Z]{16}"
-        action: redact
-
-  - name: dangerous-commands
+  - name: starter-dangerous-commands
     type: regex
     stages: [tool.before]
     rules:
-      - id: regex-cmd-001
-        title: Recursive delete
+      - id: cmd-001
+        title: Recursive delete root
         description: Blocks recursive deletion of root filesystem
-        pattern: "rm\\s+-rf\\s+/"
+        pattern: "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\\s+/"
         action: block
-        fields: [tool_args.command]       # Only check this field
+        fields: [tool_args.command]
 ```
 
-See [config.yaml](config.yaml) for a complete working example, or [docs/config.minimal.yaml](docs/config.minimal.yaml) for a minimal starter.
+### Rules tree (auto-discovered)
+
+If a `rules/` directory sits next to `parallax.yaml` (or you point `rules_dir:` at one), every file under `<rules_dir>/<engine>/*.yaml` is auto-loaded as its own evaluator. Two file shapes are supported:
+
+```yaml
+# Bare list — uses engine-default stages and filename stem as evaluator name.
+- id: sc-001
+  title: Custom PyPI index
+  keywords: ["--index-url ", "--extra-index-url "]
+  action: detect
+  priority: medium
+
+# With header — overrides name / stages / enabled.
+evaluator:
+  name: pii-scanner
+  stages: [tool.after]
+rules:
+  - id: pii-001
+    title: SSN
+    pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+    action: redact
+```
+
+When an inline rule id (in `evaluators:`) collides with a discovered rule id (in `rules/`), the discovered version wins — so dropping a `rules/` tree in cleanly upgrades the inline starter to the full curated set.
+
+Engine-default stages: `regex` and `sigma` run on `tool.before` + `tool.after`; `pattern`, `cel`, and `sql` run on `tool.before`. Override per-file with the `evaluator: { stages: [...] }` header.
+
+### Disabling evaluators
+
+```yaml
+disabled:
+  - pii-scanner            # name of an inline OR auto-discovered evaluator
+```
+
+See [parallax.yaml](parallax.yaml) for the shipped config and [`rules/`](rules/) for the curated rule library.
 
 ## Evaluator Types
 
-| Type | Description | Config |
-|------|-------------|--------|
-| **regex** | Compiled regex patterns with AND/OR, negation, field targeting, redaction | `rules` with `pattern` |
-| **pattern** | Keyword substring matching, case-insensitive | `rules` with `keywords` |
-| **sigma** | Sigma-format YAML threat detection with field modifiers and complex conditions | `rules_dir` pointing to YAML files |
-| **cel** | CEL-like expressions (`==`, `!=`, `&&`, `.contains()`, `.startsWith()`, `.matches()`) | `rules_file` pointing to YAML |
-| **sql** | In-memory SQLite for rate limiting, frequency analysis, temporal patterns | `rules` with `query` + `condition` |
+| Type | Description | Rule sources |
+|------|-------------|-------------|
+| **regex** | Compiled regex patterns with AND/OR, negation, field targeting, redaction | inline `rules`, `rules_file`, or `rules_dir` |
+| **pattern** | Keyword substring matching, case-insensitive | inline `rules`, `rules_file`, or `rules_dir` |
+| **sigma** | Sigma-format YAML threat detection with field modifiers and complex conditions | `rules_dir` of multi-document Sigma YAML |
+| **cel** | CEL-like expressions (`==`, `!=`, `&&`, `.contains()`, `.startsWith()`, `.matches()`) | inline `rules`, `rules_file`, or `rules_dir` |
+| **sql** | In-memory SQLite for rate limiting, frequency analysis, temporal patterns | inline `rules`, `rules_file`, or `rules_dir` |
 
 Evaluators run in cost order (cheapest first) and short-circuit on block.
 
@@ -186,7 +212,8 @@ Evaluators run in cost order (cheapest first) and short-circuit on block.
 Exposes a `/evaluate` HTTP endpoint. Your agent calls it at each lifecycle stage and acts on the decision.
 
 ```bash
-parallax serve -c config.yaml
+parallax serve            # auto-discovers ./parallax.yaml + ./rules/
+parallax serve -c /etc/parallax/parallax.yaml
 ```
 
 **POST /evaluate**
@@ -210,7 +237,7 @@ parallax serve -c config.yaml
 Acts as a reverse proxy between your agent and the LLM API. All traffic is automatically evaluated -- no integration code needed.
 
 ```bash
-parallax serve --mode proxy -c config.yaml
+parallax serve --mode proxy
 ```
 
 ```
@@ -309,7 +336,7 @@ Supported frameworks: `openclaw`, `claudecode`, `codex`.
 - Generic `parallax setup <name>` for LangChain, CrewAI, OpenAI Agents SDK
 - Integration directory structure for framework integrations
 - OpenAI-compatible proxy mode (`/v1/chat/completions`) covering OpenAI, Azure OpenAI, and local models (Ollama, LM Studio)
-- Configurable upstream provider in `config.yaml`
+- Configurable upstream provider in `parallax.yaml`
 
 ### -- Advanced Evaluators
 - Embedding-based semantic prompt injection detection
@@ -339,7 +366,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details on the evaluator ch
 cargo build            # Dev build
 cargo test             # Run tests (45 tests)
 cargo build --release  # Optimized release build
-RUST_LOG=debug cargo run -- serve -c config.yaml
+RUST_LOG=debug cargo run -- serve
 ```
 
 ## 📄 License

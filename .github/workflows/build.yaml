@@ -118,7 +118,7 @@ jobs:
           cp -r integrations/openclaw dist/integrations/openclaw
           cp LICENSE* dist/ || echo "License not found"
           cp README* dist/ || echo "Readme not found"
-          cp config.yaml parallax.yaml dist/ 2>/dev/null || true
+          cp parallax.yaml dist/ 2>/dev/null || true
           cp -r rules dist/ 2>/dev/null || true
 
           tar -czf "${ASSET_NAME}" -C dist .
