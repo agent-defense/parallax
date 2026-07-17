@@ -24,6 +24,36 @@ use async_trait::async_trait;
 use crate::engine::context::{EvalContext, Stage};
 use crate::engine::result::EvalResult;
 
+/// Parse a `stages: [..]` sequence from a YAML mapping value into a set of
+/// [`Stage`]s. Returns `None` if the key is absent or not a sequence, so
+/// callers can fall back to a default. Unknown stage strings are skipped.
+pub(crate) fn parse_stage_list(value: Option<&serde_yaml::Value>) -> Option<HashSet<Stage>> {
+    let seq = value?.as_sequence()?;
+    Some(
+        seq.iter()
+            .filter_map(|v| serde_yaml::from_str::<Stage>(v.as_str()?).ok())
+            .collect(),
+    )
+}
+
+/// Compute the union of per-rule stage sets. When there are no rules (or none
+/// declare stages), fall back to `default_stages` so the evaluator still
+/// subscribes to something sensible.
+pub(crate) fn union_rule_stages<'a, I>(rule_stages: I, default_stages: &HashSet<Stage>) -> HashSet<Stage>
+where
+    I: Iterator<Item = &'a HashSet<Stage>>,
+{
+    let mut union: HashSet<Stage> = HashSet::new();
+    for s in rule_stages {
+        union.extend(s.iter().copied());
+    }
+    if union.is_empty() {
+        default_stages.clone()
+    } else {
+        union
+    }
+}
+
 /// Trait that all security evaluators must implement.
 ///
 /// Implementors are constructed from YAML config and registered into an

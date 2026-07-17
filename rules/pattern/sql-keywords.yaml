@@ -1,21 +1,16 @@
 # SQL injection — keyword pattern rules
-# Auto-discovered from rules/pattern/sql-keywords.yaml.
-# Override stages to also scan user messages (not just tool args).
+# Auto-discovered. Evaluator name = filename stem (`sql-keywords`).
 
-evaluator:
-  name: sql-keywords
+- id: sql-001
+  title: SQL destructive keywords
+  description: Detects common SQL injection and destructive query patterns
   stages: [message.before, tool.before]
-
-rules:
-  - id: sql-001
-    title: SQL destructive keywords
-    description: Detects common SQL injection and destructive query patterns
-    keywords:
-      - "DROP TABLE"
-      - "DROP DATABASE"
-      - "DELETE FROM"
-      - "TRUNCATE TABLE"
-      - "'; --"
-      - "1=1"
-    action: detect
-    priority: medium
+  keywords:
+    - "DROP TABLE"
+    - "DROP DATABASE"
+    - "DELETE FROM"
+    - "TRUNCATE TABLE"
+    - "'; --"
+    - "1=1"
+  action: detect
+  priority: medium

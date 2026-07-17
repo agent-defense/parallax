@@ -7,7 +7,7 @@ use tracing::warn;
 
 use crate::engine::context::{EvalContext, Stage};
 use crate::engine::result::{Action, EvalResult};
-use crate::evaluators::Evaluator;
+use crate::evaluators::{parse_stage_list, union_rule_stages, Evaluator};
 
 /// Lightweight Sigma condition matcher operating on flat string dicts.
 ///
@@ -265,6 +265,7 @@ struct SigmaRule {
     description: String,
     action: Action,
     priority: String,
+    stages: HashSet<Stage>,
     matcher: SigmaConditionMatcher,
 }
 
@@ -279,6 +280,15 @@ impl SigmaRule {
             .and_then(|v| v.as_str())
             .unwrap_or(&title)
             .to_string();
+        let stages = match parse_stage_list(raw.get(serde_yaml::Value::String("stages".into())))
+            .filter(|s| !s.is_empty())
+        {
+            Some(s) => s,
+            None => {
+                warn!(id, "Sigma rule missing mandatory non-empty `stages:`, skipping");
+                return None;
+            }
+        };
         let description = raw
             .get(serde_yaml::Value::String("description".into()))
             .and_then(|v| v.as_str())
@@ -310,6 +320,7 @@ impl SigmaRule {
             description,
             action,
             priority,
+            stages,
             matcher: SigmaConditionMatcher::new(detection),
         })
     }
@@ -332,15 +343,14 @@ impl SigmaEvaluator {
     pub fn new(name: String, config: &serde_yaml::Value) -> Self {
         let map = config.as_mapping().cloned().unwrap_or_default();
 
-        let stages = map
-            .get(serde_yaml::Value::String("stages".into()))
-            .and_then(|v| v.as_sequence())
-            .map(|seq| {
-                seq.iter()
-                    .filter_map(|v| serde_yaml::from_str(v.as_str()?).ok())
-                    .collect()
-            })
-            .unwrap_or_else(|| [Stage::ToolBefore, Stage::ToolAfter].into_iter().collect());
+        let fallback: HashSet<Stage> =
+            parse_stage_list(map.get(serde_yaml::Value::String("stages".into())))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| {
+                    [Stage::MessageBefore, Stage::ToolBefore, Stage::ToolAfter]
+                        .into_iter()
+                        .collect()
+                });
 
         let mut rules = Vec::new();
 
@@ -365,6 +375,8 @@ impl SigmaEvaluator {
                 }
             }
         }
+
+        let stages = union_rule_stages(rules.iter().map(|r| &r.stages), &fallback);
 
         Self {
             name,
@@ -448,6 +460,9 @@ impl Evaluator for SigmaEvaluator {
         let event = ctx.flat_fields();
 
         for rule in &self.rules {
+            if !rule.stages.contains(&ctx.stage) {
+                continue;
+            }
             if rule.matcher.matches(&event) {
                 return EvalResult {
                     evaluator: self.name.clone(),
@@ -516,6 +531,7 @@ mod tests {
         let yaml = r#"
 title: Test rule
 action: block
+stages: [tool.before]
 detection:
   selection:
     tool_name: exec
@@ -537,6 +553,7 @@ detection:
         let yaml = r#"
 title: Network exfiltration
 action: block
+stages: [tool.before]
 detection:
   selection:
     tool_name: exec
@@ -573,6 +590,7 @@ detection:
         let yaml = r#"
 title: File write outside workspace
 action: block
+stages: [tool.before]
 detection:
   selection:
     tool_name: write_file
@@ -603,6 +621,7 @@ detection:
 stages: [tool.before]
 rules:
   - title: Block exec
+    stages: [tool.before]
     action: block
     detection:
       selection:

@@ -6,7 +6,7 @@ use tracing::warn;
 
 use crate::engine::context::{EvalContext, Stage};
 use crate::engine::result::{Action, EvalResult};
-use crate::evaluators::Evaluator;
+use crate::evaluators::{parse_stage_list, union_rule_stages, Evaluator};
 
 /// A single compiled pattern with optional negation and field targeting.
 struct PatternEntry {
@@ -22,6 +22,7 @@ struct RegexRule {
     description: String,
     action: Action,
     priority: String,
+    stages: HashSet<Stage>,
     fields: Option<Vec<String>>,
     patterns: Vec<PatternEntry>,
     match_mode: MatchMode,
@@ -34,12 +35,23 @@ enum MatchMode {
 }
 
 impl RegexRule {
+    /// Parse a rule. `stages:` is mandatory; returns `None` (and warns) if
+    /// missing or empty.
     fn from_config(raw: &serde_yaml::Value) -> Option<Self> {
         let map = raw.as_mapping()?;
         let id = map
             .get(serde_yaml::Value::String("id".into()))?
             .as_str()?
             .to_string();
+        let stages = match parse_stage_list(map.get(serde_yaml::Value::String("stages".into())))
+            .filter(|s| !s.is_empty())
+        {
+            Some(s) => s,
+            None => {
+                warn!(id, "Regex rule missing mandatory non-empty `stages:`, skipping");
+                return None;
+            }
+        };
         let title = map
             .get(serde_yaml::Value::String("title".into()))
             .and_then(|v| v.as_str())
@@ -168,6 +180,7 @@ impl RegexRule {
             description,
             action,
             priority,
+            stages,
             fields,
             patterns,
             match_mode,
@@ -197,24 +210,19 @@ impl RegexEvaluator {
     pub fn new(name: String, config: &serde_yaml::Value) -> Self {
         let map = config.as_mapping().cloned().unwrap_or_default();
 
-        let stages = map
-            .get(serde_yaml::Value::String("stages".into()))
-            .and_then(|v| v.as_sequence())
-            .map(|seq| {
-                seq.iter()
-                    .filter_map(|v| {
-                        let s = v.as_str()?;
-                        serde_yaml::from_str(s).ok()
-                    })
-                    .collect()
-            })
-            .unwrap_or_else(|| [Stage::ToolBefore, Stage::ToolAfter].into_iter().collect());
-
-        let rules = map
+        let rules: Vec<RegexRule> = map
             .get(serde_yaml::Value::String("rules".into()))
             .and_then(|v| v.as_sequence())
             .map(|seq| seq.iter().filter_map(RegexRule::from_config).collect())
             .unwrap_or_default();
+
+        // Subscribe to the union of rules' stages. Evaluator-level `stages`
+        // (if present) is only a fallback when no rules loaded successfully.
+        let fallback: HashSet<Stage> =
+            parse_stage_list(map.get(serde_yaml::Value::String("stages".into())))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| [Stage::ToolBefore, Stage::ToolAfter].into_iter().collect());
+        let stages = union_rule_stages(rules.iter().map(|r| &r.stages), &fallback);
 
         Self {
             name,
@@ -284,6 +292,10 @@ impl Evaluator for RegexEvaluator {
         let full_text = ctx.searchable_text();
 
         for rule in &self.rules {
+            if !rule.stages.contains(&ctx.stage) {
+                continue;
+            }
+
             let targets: Vec<&str> = if let Some(ref fields) = rule.fields {
                 fields
                     .iter()
@@ -372,6 +384,7 @@ mod tests {
 stages: [tool.before]
 rules:
   - id: test-001
+    stages: [tool.before]
     title: "dangerous rm"
     description: "Blocks recursive rm"
     pattern: "rm\\s+-rf\\s+/"
@@ -391,6 +404,7 @@ rules:
 stages: [tool.before]
 rules:
   - id: test-001
+    stages: [tool.before]
     title: "dangerous rm"
     pattern: "rm\\s+-rf\\s+/"
     action: block
@@ -408,6 +422,7 @@ rules:
 stages: [tool.before]
 rules:
   - id: test-002
+    stages: [tool.before]
     title: "AWS key"
     pattern: "AKIA[0-9A-Z]{16}"
     action: redact
@@ -426,6 +441,7 @@ rules:
 stages: [tool.before]
 rules:
   - id: test-003
+    stages: [tool.before]
     title: "rm in command field"
     pattern: "rm\\s+-rf"
     action: block
@@ -444,6 +460,7 @@ rules:
 stages: [tool.before]
 rules:
   - id: test-004
+    stages: [tool.before]
     title: "must match both"
     action: block
     match: all
@@ -468,6 +485,7 @@ rules:
 stages: [tool.before]
 rules:
   - id: test-005
+    stages: [tool.before]
     title: "rm without safe flag"
     action: block
     match: all

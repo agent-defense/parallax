@@ -55,7 +55,7 @@ Requires [Rust](https://rustup.rs/) 1.70+. No other dependencies.
 ./parallax serve
 ```
 
-This auto-discovers `parallax.yaml` in the current directory. If a `rules/` directory sits next to it, the full curated rule set under [`rules/`](rules/) is auto-discovered too (one evaluator per file, engine-typical default stages). Drop `rules/` and only the inline starter rules in `parallax.yaml` load — useful for a stripped-down install.
+This auto-discovers `parallax.yaml` in the current directory. If a `rules/` directory sits next to it, the full curated rule set under [`rules/`](rules/) is auto-discovered too (one evaluator per file; each rule declares its own `stages:`). Drop `rules/` and only the inline starter rules in `parallax.yaml` load — useful for a stripped-down install.
 
 To point at a config in another location:
 
@@ -141,36 +141,27 @@ evaluators:
 
 ### Rules tree (auto-discovered)
 
-If a `rules/` directory sits next to `parallax.yaml` (or you point `rules_dir:` at one), every file under `<rules_dir>/<engine>/*.yaml` is auto-loaded as its own evaluator. Two file shapes are supported:
+If a `rules/` directory sits next to `parallax.yaml` (or you point `rules_dir:` at one), every file under `<rules_dir>/<engine>/*.yaml` is auto-loaded as its own evaluator. Rule files are **flat YAML lists**. Every rule must declare its own `stages:` array:
 
 ```yaml
-# Bare list — uses engine-default stages and filename stem as evaluator name.
 - id: sc-001
   title: Custom PyPI index
+  description: Detects pip installs from non-default package indexes
+  stages: [tool.before]
   keywords: ["--index-url ", "--extra-index-url "]
   action: detect
   priority: medium
-
-# With header — overrides name / stages / enabled.
-evaluator:
-  name: pii-scanner
-  stages: [tool.after]
-rules:
-  - id: pii-001
-    title: SSN
-    pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
-    action: redact
 ```
 
-When an inline rule id (in `evaluators:`) collides with a discovered rule id (in `rules/`), the discovered version wins — so dropping a `rules/` tree in cleanly upgrades the inline starter to the full curated set.
+Mandatory fields per rule: `id`, `title`, `description`, `stages`, `action`, `priority` (plus engine-specific fields like `pattern`, `keywords`, `expr`, or `query`). A rule missing `stages:` is skipped at load time.
 
-Engine-default stages: `regex` and `sigma` run on `tool.before` + `tool.after`; `pattern`, `cel`, and `sql` run on `tool.before`. Override per-file with the `evaluator: { stages: [...] }` header.
+When an inline rule id (in `evaluators:`) collides with a discovered rule id (in `rules/`), the discovered version wins — so dropping a `rules/` tree in cleanly upgrades the inline starter to the full curated set.
 
 ### Disabling evaluators
 
 ```yaml
 disabled:
-  - pii-scanner            # name of an inline OR auto-discovered evaluator
+  - pii                    # auto-discovered evaluator name (filename stem)
 ```
 
 See [parallax.yaml](parallax.yaml) for the shipped config and [`rules/`](rules/) for the curated rule library.

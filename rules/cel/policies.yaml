@@ -6,6 +6,7 @@
 - id: pol-001
   title: Block recursive file deletion
   description: Prevents recursive file deletion via rm -r commands
+  stages: [tool.before]
   expr: 'tool_name == "exec" && tool_args_command.matches("rm\\s+-r")'
   action: block
   priority: high
@@ -14,6 +15,7 @@
 - id: pol-002
   title: Block world-writable permissions
   description: Prevents setting chmod 777 which makes files world-writable
+  stages: [tool.before]
   expr: 'tool_name == "exec" && tool_args_command.contains("chmod 777")'
   action: block
   priority: medium
@@ -22,6 +24,7 @@
 - id: pol-003
   title: Detect sudo usage
   description: Detects elevated privilege execution via sudo
+  stages: [tool.before]
   expr: 'tool_name == "exec" && tool_args_command.startsWith("sudo")'
   action: detect
   priority: low
@@ -30,6 +33,7 @@
 - id: pol-004
   title: Detect environment variable dump
   description: Detects environment variable dumps that may expose secrets
+  stages: [tool.before]
   expr: 'tool_name == "exec" && (tool_args_command == "env" || tool_args_command == "printenv" || tool_args_command.contains("export"))'
   action: detect
   priority: medium

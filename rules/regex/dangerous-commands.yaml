@@ -1,48 +1,47 @@
 # Dangerous shell commands — regex rules
-# Auto-discovered from rules/regex/dangerous-commands.yaml.
-# Override stages so we only scan tool ARGS before execution, not results.
+# Auto-discovered. Evaluator name = filename stem (`dangerous-commands`).
 
-evaluator:
-  name: dangerous-commands
+- id: cmd-001
+  title: Recursive delete root
+  description: Blocks recursive deletion of root filesystem
   stages: [tool.before]
+  pattern: "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\\s+/"
+  action: block
+  priority: high
+  fields: [tool_args.command]
 
-rules:
-  - id: cmd-001
-    title: Recursive delete root
-    description: Blocks recursive deletion of root filesystem
-    pattern: "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\\s+/"
-    action: block
-    priority: high
-    fields: [tool_args.command]
+- id: cmd-002
+  title: Format disk
+  description: Blocks filesystem formatting commands
+  stages: [tool.before]
+  pattern: "mkfs\\."
+  action: block
+  priority: high
+  fields: [tool_args.command]
 
-  - id: cmd-002
-    title: Format disk
-    description: Blocks filesystem formatting commands
-    pattern: "mkfs\\."
-    action: block
-    priority: high
-    fields: [tool_args.command]
+- id: cmd-003
+  title: Disk overwrite
+  description: Blocks raw disk writes via dd to device files
+  stages: [tool.before]
+  pattern: "dd\\s+.*of=/dev/"
+  action: block
+  priority: high
+  fields: [tool_args.command]
 
-  - id: cmd-003
-    title: Disk overwrite
-    description: Blocks raw disk writes via dd to device files
-    pattern: "dd\\s+.*of=/dev/"
-    action: block
-    priority: high
-    fields: [tool_args.command]
+- id: cmd-004
+  title: Chmod 777 recursive
+  description: Blocks recursive permission changes to world-writable
+  stages: [tool.before]
+  pattern: "chmod\\s+-[a-zA-Z]*R[a-zA-Z]*\\s+777"
+  action: block
+  priority: high
+  fields: [tool_args.command]
 
-  - id: cmd-004
-    title: Chmod 777 recursive
-    description: Blocks recursive permission changes to world-writable
-    pattern: "chmod\\s+-[a-zA-Z]*R[a-zA-Z]*\\s+777"
-    action: block
-    priority: high
-    fields: [tool_args.command]
-
-  - id: cmd-005
-    title: Curl pipe to shell
-    description: Blocks piping curl output directly to a shell interpreter
-    pattern: "curl\\s+.*\\|\\s*(bash|sh|zsh)"
-    action: block
-    priority: high
-    fields: [tool_args.command]
+- id: cmd-005
+  title: Curl pipe to shell
+  description: Blocks piping curl output directly to a shell interpreter
+  stages: [tool.before]
+  pattern: "curl\\s+.*\\|\\s*(bash|sh|zsh)"
+  action: block
+  priority: high
+  fields: [tool_args.command]

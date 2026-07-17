@@ -1,6 +1,6 @@
 # Security Rules Reference
 
-Parallax ships with **54 active rules across 13 threat categories** (plus one detect-only swap rule shipped commented-out), providing defense-in-depth for AI agent systems. Rules live under [`rules/`](../rules), grouped by evaluator engine (`regex/`, `pattern/`, `cel/`, `sigma/`, `sql/`), and are **auto-discovered at startup** — one evaluator per file, named after the filename stem, with engine-typical default stages.
+Parallax ships with **54 active rules across 13 threat categories** (plus one detect-only swap rule shipped commented-out), providing defense-in-depth for AI agent systems. Rules live under [`rules/`](../rules), grouped by evaluator engine (`regex/`, `pattern/`, `cel/`, `sigma/`, `sql/`), and are **auto-discovered at startup** — one evaluator per file, named after the filename stem. Every rule declares its own mandatory `stages:` array.
 
 **Design principles:**
 
@@ -271,7 +271,7 @@ Three loading paths exist; in order of preference:
 
 | Source | Used by | Behavior |
 |--------|---------|----------|
-| `rules/` auto-discovery | `regex`, `pattern`, `cel`, `sql`, `sigma` | Default. The loader walks `./rules/<engine>/*.yaml` and registers one evaluator per file. Evaluator name = filename stem. Stages = engine-typical defaults unless the file carries an `evaluator: { stages: [...] }` header. Override the root with `rules_dir:` in `parallax.yaml`. |
+| `rules/` auto-discovery | `regex`, `pattern`, `cel`, `sql`, `sigma` | Default. The loader walks `./rules/<engine>/*.yaml` and registers one evaluator per file. Each file is a flat YAML list of rules; every rule has a mandatory `stages:` array. Evaluator name = filename stem; evaluator stages = union of its rules' stages. |
 | `rules:` (inline) | all | Rules embedded under `evaluators:` in `parallax.yaml`. Used for the shipped starter set. |
 | `rules_file: <path>`, `rules_dir: <path>` on an inline evaluator | `regex`, `pattern`, `cel`, `sql`, `sigma` | Explicit external references — appended to that evaluator's `rules:` list at load time. |
 
@@ -287,6 +287,7 @@ Drop a `.yaml` file in `rules/sigma/` — the `sigma-threats` evaluator auto-loa
 title: My custom rule
 id: custom-001
 description: What this rule detects and why it matters
+stages: [tool.before]
 detection:
   selection:
     tool_name: exec
@@ -297,16 +298,21 @@ detection:
 action: block    # block, detect, redact, or allow
 ```
 
+Non-Sigma rule files are flat YAML lists. Every rule must include `stages:`
+alongside `id`, `title`, `description`, `action`, and `priority`.
+
 ### Adding a CEL rule
 
-Append to one of the existing files in `rules/cel/`, or drop a new `rules/cel/<name>.yaml`. A bare list works for default stages; add an `evaluator:` header to override stages or the evaluator name. Pick a category prefix (`pol`, `pe`, `mm`, or your own) and a free numeric slot:
+Append to one of the existing files in `rules/cel/`, or drop a new `rules/cel/<name>.yaml`. Pick a category prefix (`pol`, `pe`, `mm`, or your own) and a free numeric slot:
 
 ```yaml
 - id: pol-099
   title: My custom CEL rule
   description: Description of what this rule detects
+  stages: [tool.before]
   expr: 'tool_name == "exec" && tool_args_command.contains("dangerous")'
   action: block
+  priority: high
   reason: Description of why this is blocked
 ```
 
@@ -318,8 +324,10 @@ Append to one of the existing files in `rules/regex/`, or drop a new `rules/rege
 - id: cmd-099
   title: My pattern
   description: Detects a dangerous regex pattern in tool arguments
+  stages: [tool.before]
   pattern: "dangerous-regex-here"
   action: block               # block, redact, detect, allow
+  priority: high
   fields: [tool_args.command] # optional: target specific fields
 ```
 
@@ -331,8 +339,10 @@ Append to a file in `rules/pattern/`, or drop a new file. Pick a category prefix
 - id: sc-099
   title: My keyword rule
   description: Detects dangerous keywords in tool arguments
+  stages: [tool.before]
   keywords: ["dangerous-keyword"]
   action: block
+  priority: high
 ```
 
 ### Adding a SQL rule
@@ -343,11 +353,13 @@ Append to `rules/sql/rate-limits.yaml`, or drop a new `rules/sql/<name>.yaml`. U
 - id: rl-099
   title: My aggregate rule
   description: Detects abnormal event patterns using SQL aggregation
+  stages: [tool.before, tool.after]
   query: >
     SELECT COUNT(*) as cnt FROM events
     WHERE session_id = :session_id AND timestamp > :now - 120
   condition: "cnt > 10"
   action: detect
+  priority: medium
   reason: "What this means"
 ```
 

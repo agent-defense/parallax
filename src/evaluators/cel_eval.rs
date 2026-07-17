@@ -6,7 +6,7 @@ use tracing::warn;
 
 use crate::engine::context::{EvalContext, Stage};
 use crate::engine::result::{Action, EvalResult};
-use crate::evaluators::Evaluator;
+use crate::evaluators::{parse_stage_list, union_rule_stages, Evaluator};
 
 // ---------------------------------------------------------------------------
 // Lightweight CEL-like expression parser and evaluator
@@ -374,6 +374,7 @@ struct CELRule {
     action: Action,
     reason: String,
     priority: String,
+    stages: HashSet<Stage>,
 }
 
 /// CEL evaluator — Common Expression Language policy rules.
@@ -394,16 +395,6 @@ impl CELEvaluator {
     pub fn new(name: String, config: &serde_yaml::Value) -> Self {
         let map = config.as_mapping().cloned().unwrap_or_default();
 
-        let stages = map
-            .get(serde_yaml::Value::String("stages".into()))
-            .and_then(|v| v.as_sequence())
-            .map(|seq| {
-                seq.iter()
-                    .filter_map(|v| serde_yaml::from_str(v.as_str()?).ok())
-                    .collect()
-            })
-            .unwrap_or_else(|| [Stage::ToolBefore, Stage::ToolAfter].into_iter().collect());
-
         let mut rules = Vec::new();
 
         if let Some(seq) = map
@@ -420,6 +411,15 @@ impl CELEvaluator {
                     .and_then(|v| v.as_str())
                     .unwrap_or("unnamed")
                     .to_string();
+                let stages = match parse_stage_list(m.get(serde_yaml::Value::String("stages".into())))
+                    .filter(|s| !s.is_empty())
+                {
+                    Some(s) => s,
+                    None => {
+                        warn!(id, "CEL rule missing mandatory non-empty `stages:`, skipping");
+                        continue;
+                    }
+                };
                 let title = m
                     .get(serde_yaml::Value::String("title".into()))
                     .and_then(|v| v.as_str())
@@ -471,6 +471,7 @@ impl CELEvaluator {
                         action,
                         reason,
                         priority,
+                        stages,
                     }),
                     None => {
                         warn!(id, expr = expr_str, "Failed to parse CEL expression");
@@ -478,6 +479,12 @@ impl CELEvaluator {
                 }
             }
         }
+
+        let fallback: HashSet<Stage> =
+            parse_stage_list(map.get(serde_yaml::Value::String("stages".into())))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| [Stage::ToolBefore, Stage::ToolAfter].into_iter().collect());
+        let stages = union_rule_stages(rules.iter().map(|r| &r.stages), &fallback);
 
         Self {
             name,
@@ -508,6 +515,9 @@ impl Evaluator for CELEvaluator {
             .collect();
 
         for rule in &self.rules {
+            if !rule.stages.contains(&ctx.stage) {
+                continue;
+            }
             match eval_expr(&rule.expr, &activation) {
                 Ok(CelValue::Bool(true)) => {
                     let reason = if rule.reason.is_empty() {
@@ -623,6 +633,7 @@ mod tests {
 stages: [tool.before]
 rules:
   - id: cel-test-001
+    stages: [tool.before]
     title: Block sudo
     description: Blocks privilege escalation via sudo
     expr: 'tool_name == "exec" && tool_args_command.startsWith("sudo")'

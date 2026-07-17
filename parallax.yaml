@@ -5,21 +5,20 @@
 # (or use -c <path> to point at one explicitly).
 #
 # Sections:
-#   server      — HTTP bind address
-#   proxy       — Upstream LLM provider for proxy mode
-#   reporting   — Audit log + webhook configuration
-#   evaluators  — Inline starter rules (so the server is useful even
-#                 without a rules/ directory)
-#   rules_dir   — Optional. Defaults to ./rules next to this file when
-#                 that directory exists. Auto-discovers every file under
-#                 <rules_dir>/<engine>/*.yaml.
-#   disabled    — Optional. Suppress specific evaluators by name.
+#   server               — HTTP bind address
+#   proxy                — Upstream LLM provider for proxy mode
+#   reporting            — Audit log + webhook configuration
+#   evaluators           — Inline starter rules (so the server is useful even
+#                          without a rules/ directory)
+#   rules_dir            — Optional. Defaults to ./rules next to this file when
+#                          that directory exists. Auto-discovers every file under
+#                          <rules_dir>/<engine>/*.yaml.
+#   disabled             — Optional. Suppress specific evaluators by name.
 #
 # Rule resolution:
 #   - Inline `evaluators:` below are loaded first.
-#   - If a rules/ tree is present, every file under it is auto-discovered
-#     with engine-typical default stages (override per-file via an
-#     `evaluator: { stages: [...] }` header).
+#   - If a rules/ tree is present, every file under it is auto-discovered.
+#     Each rule declares its own mandatory `stages:` array.
 #   - When an inline rule id collides with a discovered rule id, the
 #     discovered version wins (so dropping a rules/ tree in gives you
 #     the curated set, not the stub).
@@ -46,7 +45,7 @@ reporting:
 # Optional: suppress specific evaluators by name (matches both inline
 # evaluators below and rules/-discovered ones).
 # disabled:
-#   - pii-scanner
+#   - pii
 
 # Minimal essentials so a bare `parallax serve` (no rules/ directory)
 # still blocks the obvious. When the rules/ tree is present, these ids
@@ -59,12 +58,14 @@ evaluators:
       - id: sec-001
         title: AWS Access Key
         description: Detects AWS access key IDs starting with AKIA
+        stages: [tool.before, tool.after]
         pattern: "AKIA[0-9A-Z]{16}"
         action: redact
         priority: high
       - id: sec-006
         title: Private Key Block
         description: Detects PEM-encoded private key blocks
+        stages: [tool.before, tool.after]
         pattern: "-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
         action: block
         priority: high
@@ -76,6 +77,7 @@ evaluators:
       - id: cmd-001
         title: Recursive delete root
         description: Blocks recursive deletion of root filesystem
+        stages: [tool.before]
         pattern: "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\\s+/"
         action: block
         priority: high
@@ -83,6 +85,7 @@ evaluators:
       - id: cmd-005
         title: Curl pipe to shell
         description: Blocks piping curl output directly to a shell interpreter
+        stages: [tool.before]
         pattern: "curl\\s+.*\\|\\s*(bash|sh|zsh)"
         action: block
         priority: high
