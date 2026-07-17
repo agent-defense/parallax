@@ -22,14 +22,39 @@ use crate::evaluators::sql_eval::SQLEvaluator;
 
 const DEFAULT_CONFIG_PATHS: &[&str] = &["parallax.yaml", "parallax.yml"];
 
-/// Default stages for the synthesized Sigma evaluator. Sigma rule files use
-/// multi-document Sigma format and are combined into a single evaluator, so
-/// (unlike the flat rule files) they do not declare their own `stages:`.
+/// Default stages for the synthesized Sigma evaluator when individual Sigma
+/// documents do not declare stages (legacy). Prefer per-document `stages:`.
 fn sigma_default_stages() -> Vec<String> {
     ["message.before", "tool.before", "tool.after"]
         .iter()
         .map(|s| (*s).to_string())
         .collect()
+}
+
+/// Collect the union of per-rule `stages:` arrays from a list of rule values.
+/// Rules missing a non-empty `stages:` are skipped (with a warning at the call site).
+fn union_stages_from_rules(rules: &[serde_yaml::Value]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut ordered = Vec::new();
+    for rule in rules {
+        let Some(map) = rule.as_mapping() else {
+            continue;
+        };
+        let Some(seq) = map
+            .get(serde_yaml::Value::String("stages".into()))
+            .and_then(|v| v.as_sequence())
+        else {
+            continue;
+        };
+        for v in seq {
+            if let Some(s) = v.as_str() {
+                if seen.insert(s.to_string()) {
+                    ordered.push(s.to_string());
+                }
+            }
+        }
+    }
+    ordered
 }
 
 /// Find a config file. If `path` is provided, use it directly.
@@ -249,9 +274,9 @@ fn expand_rule_sources(evaluators: &mut [EvaluatorConfig], config_root: &Path) {
 /// `EvaluatorConfig` per rule file (regex/pattern/cel/sql) and one combined
 /// sigma evaluator that points the existing Sigma loader at `<rules_root>/sigma/`.
 ///
-/// Each non-Sigma rule file is a mapping with a mandatory root-level `stages:`
-/// array and a `rules:` list of flat rule entries. Evaluator name = filename
-/// stem.
+/// Each non-Sigma rule file is a flat YAML sequence of rule entries. Every
+/// rule must declare its own `stages:` array. Evaluator name = filename stem;
+/// evaluator-level stages = union of its rules' stages.
 fn discover_rules_tree(rules_root: &Path) -> Vec<EvaluatorConfig> {
     if !rules_root.is_dir() {
         return Vec::new();
@@ -318,23 +343,20 @@ fn discover_rules_tree(rules_root: &Path) -> Vec<EvaluatorConfig> {
     discovered
 }
 
-/// Parse a rule file into an `EvaluatorConfig`. The file must be a mapping
-/// with a mandatory root-level `stages:` array and a `rules:` list of flat
-/// rule entries:
+/// Parse a flat rule file (YAML sequence of rule entries) into an
+/// `EvaluatorConfig`. Every rule must declare a non-empty `stages:` array;
+/// rules missing it are skipped with a warning. Evaluator-level stages are
+/// the union of surviving rules' stages.
 ///
 /// ```yaml
-/// stages: [tool.before, tool.after]
-/// rules:
-///   - id: sec-001
-///     title: AWS Access Key
-///     description: ...
-///     pattern: "AKIA[0-9A-Z]{16}"
-///     action: redact
-///     priority: high
+/// - id: sec-001
+///   title: AWS Access Key
+///   description: ...
+///   stages: [tool.before, tool.after]
+///   pattern: "AKIA[0-9A-Z]{16}"
+///   action: redact
+///   priority: high
 /// ```
-///
-/// Files missing `stages:` (or using the old flat-list / `evaluator:` wrapper
-/// shapes) are rejected with a warning.
 fn parse_rule_file(path: &Path, engine: &str) -> Option<EvaluatorConfig> {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
@@ -357,48 +379,54 @@ fn parse_rule_file(path: &Path, engine: &str) -> Option<EvaluatorConfig> {
         .unwrap_or("unnamed")
         .to_string();
 
-    let map = match val {
-        serde_yaml::Value::Mapping(m) => m,
+    let raw_rules = match val {
+        serde_yaml::Value::Sequence(seq) => seq,
         serde_yaml::Value::Null => return None,
-        _ => {
+        other => {
             warn!(
                 path = %path.display(),
-                "Rule file must be a mapping with a root-level `stages:` array \
-                 and a `rules:` list"
+                kind = ?std::mem::discriminant(&other),
+                "Rule file must be a flat YAML list of rules (each with its own `stages:`)"
             );
             return None;
         }
     };
 
-    let stages: Vec<String> = match map
-        .get(serde_yaml::Value::String("stages".into()))
-        .and_then(|v| v.as_sequence())
-    {
-        Some(seq) => seq
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect(),
-        None => {
+    let mut rules = Vec::new();
+    for rule in raw_rules {
+        let Some(map) = rule.as_mapping() else {
+            warn!(path = %path.display(), "Skipping non-mapping rule entry");
+            continue;
+        };
+        let id = map
+            .get(serde_yaml::Value::String("id".into()))
+            .and_then(|v| v.as_str())
+            .unwrap_or("<unknown>");
+        let stages_ok = map
+            .get(serde_yaml::Value::String("stages".into()))
+            .and_then(|v| v.as_sequence())
+            .map(|seq| !seq.is_empty() && seq.iter().any(|v| v.as_str().is_some()))
+            .unwrap_or(false);
+        if !stages_ok {
             warn!(
                 path = %path.display(),
-                "Rule file is missing the mandatory root-level `stages:` array"
+                rule_id = id,
+                "Rule is missing mandatory non-empty `stages:` array, skipping"
             );
-            return None;
+            continue;
         }
-    };
-    if stages.is_empty() {
+        rules.push(rule);
+    }
+
+    if rules.is_empty() {
         warn!(
             path = %path.display(),
-            "Rule file `stages:` must be a non-empty array"
+            "Rule file has no valid rules (each needs id + stages), skipping"
         );
         return None;
     }
 
-    let rules = map
-        .get(serde_yaml::Value::String("rules".into()))
-        .and_then(|v| v.as_sequence())
-        .cloned()
-        .unwrap_or_default();
+    let stages = union_stages_from_rules(&rules);
 
     Some(EvaluatorConfig {
         name,
@@ -465,9 +493,9 @@ fn drop_overridden_inline_rules(
 ///   2. If `evaluators_dir` is set (or `./evaluators` exists), load full
 ///      evaluator definitions from there (legacy path; unchanged).
 ///   3. If `rules_dir` is set, or `./rules` exists next to the config file,
-///      auto-discover evaluators from `<rules_dir>/<engine>/*.yaml`. Each file
-///      declares its own mandatory root-level `stages:` array. Skips files
-///      whose evaluator name is already declared inline in `parallax.yaml`.
+///      auto-discover evaluators from `<rules_dir>/<engine>/*.yaml`. Each rule
+///      declares its own mandatory `stages:` array; evaluator stages are the
+///      union. Skips files whose evaluator name is already declared inline.
 ///   4. Inline rules whose `id` matches a discovered rule are dropped (the
 ///      rules-tree version wins).
 ///   5. Any evaluator whose name is in `disabled:` is removed.
@@ -618,7 +646,7 @@ pub fn build_chain(config: &PlatformConfig) -> EvaluatorChain {
             info!(
                 name = %ec.name,
                 eval_type = %ec.eval_type,
-                stages = ?ec.stages,
+                stages = ?ev.stages(),
                 "Registered evaluator"
             );
             chain.add(ev);
@@ -837,8 +865,8 @@ evaluators:
         assert_eq!(chain.len(), 1);
     }
 
-    /// Build a working rules tree on disk and verify auto-discovery reads the
-    /// mandatory root-level `stages:` array from each file.
+    /// Build a working rules tree on disk and verify auto-discovery unions
+    /// per-rule `stages:` into the evaluator subscription.
     #[test]
     fn test_discover_rules_tree_reads_stages() {
         let dir = tempfile::tempdir().unwrap();
@@ -846,7 +874,7 @@ evaluators:
         std::fs::create_dir(&regex_dir).unwrap();
         std::fs::write(
             regex_dir.join("secrets.yaml"),
-            "stages: [tool.before, tool.after]\nrules:\n  - {id: sec-001, title: t, pattern: foo, action: redact}\n",
+            "- {id: sec-001, title: t, stages: [tool.before, tool.after], pattern: foo, action: redact}\n",
         )
         .unwrap();
 
@@ -854,7 +882,7 @@ evaluators:
         std::fs::create_dir(&cel_dir).unwrap();
         std::fs::write(
             cel_dir.join("policies.yaml"),
-            "stages: [tool.before]\nrules:\n  - {id: pol-001, title: t, expr: 'true', action: detect}\n",
+            "- {id: pol-001, title: t, stages: [tool.before], expr: 'true', action: detect}\n",
         )
         .unwrap();
 
@@ -874,22 +902,23 @@ evaluators:
         assert_eq!(policies.stages, vec!["tool.before".to_string()]);
     }
 
-    /// A file missing the mandatory root-level `stages:` array is rejected.
+    /// Rules missing per-rule `stages:` are skipped; a file with no valid
+    /// rules is rejected entirely.
     #[test]
     fn test_discover_rules_tree_rejects_missing_stages() {
         let dir = tempfile::tempdir().unwrap();
         let regex_dir = dir.path().join("regex");
         std::fs::create_dir(&regex_dir).unwrap();
-        // Old flat-list shape (no root stages).
+        // Flat list but no per-rule stages.
         std::fs::write(
             regex_dir.join("flat.yaml"),
             "- {id: sec-001, title: t, pattern: foo, action: redact}\n",
         )
         .unwrap();
-        // Mapping with rules but no stages.
+        // Old nested mapping shape (no longer accepted).
         std::fs::write(
-            regex_dir.join("nostages.yaml"),
-            "rules:\n  - {id: sec-002, title: t, pattern: bar, action: redact}\n",
+            regex_dir.join("nested.yaml"),
+            "stages: [tool.after]\nrules:\n  - {id: sec-002, title: t, pattern: bar, action: redact}\n",
         )
         .unwrap();
 
@@ -975,7 +1004,7 @@ evaluators:
         std::fs::create_dir_all(&regex_dir).unwrap();
         std::fs::write(
             regex_dir.join("secrets.yaml"),
-            "stages: [tool.before, tool.after]\nrules:\n  - {id: sec-001, title: real, pattern: AKIA, action: redact}\n",
+            "- {id: sec-001, title: real, stages: [tool.before, tool.after], pattern: AKIA, action: redact}\n",
         )
         .unwrap();
 
@@ -1007,12 +1036,12 @@ disabled: [pii]
         std::fs::create_dir_all(&regex_dir).unwrap();
         std::fs::write(
             regex_dir.join("pii.yaml"),
-            "stages: [tool.after]\nrules:\n  - {id: pii-001, title: ssn, description: test, pattern: \"\\\\d+\", action: redact, priority: high}\n",
+            "- {id: pii-001, title: ssn, description: test, stages: [tool.after], pattern: \"\\\\d+\", action: redact, priority: high}\n",
         )
         .unwrap();
         std::fs::write(
             regex_dir.join("secrets.yaml"),
-            "stages: [tool.before, tool.after]\nrules:\n  - {id: sec-001, title: t, pattern: AKIA, action: redact}\n",
+            "- {id: sec-001, title: t, stages: [tool.before, tool.after], pattern: AKIA, action: redact}\n",
         )
         .unwrap();
 
@@ -1021,9 +1050,9 @@ disabled: [pii]
         assert!(!config.evaluators.iter().any(|e| e.name == "pii"));
     }
 
-    /// Auto-discovered evaluators pick up their own per-file `stages:`.
+    /// Auto-discovered evaluators union per-rule `stages:`.
     #[test]
-    fn test_load_config_reads_per_file_stages() {
+    fn test_load_config_reads_per_rule_stages() {
         let dir = tempfile::tempdir().unwrap();
         let cfg_path = dir.path().join("parallax.yaml");
         std::fs::write(&cfg_path, "server:\n  port: 9920\n").unwrap();
@@ -1032,7 +1061,7 @@ disabled: [pii]
         std::fs::create_dir_all(&regex_dir).unwrap();
         std::fs::write(
             regex_dir.join("pii.yaml"),
-            "stages: [tool.after]\nrules:\n  - {id: pii-001, title: ssn, description: test, pattern: \"\\\\d+\", action: redact, priority: high}\n",
+            "- {id: pii-001, title: ssn, description: test, stages: [tool.after], pattern: \"\\\\d+\", action: redact, priority: high}\n",
         )
         .unwrap();
 

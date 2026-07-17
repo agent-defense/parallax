@@ -11,58 +11,62 @@
 #   - id: pe-001
 #     title: Block sudo privilege escalation
 #     description: Blocks privilege escalation via sudo command
+#     stages: [tool.before]
 #     expr: 'tool_name == "exec" && tool_args_command.matches("^sudo\\s")'
 #     action: block
 #     priority: high
 #     reason: Privilege escalation via sudo is not allowed
 
-stages: [tool.before]
+- id: pe-002
+  title: Block user switching
+  description: Blocks switching to another user via su command
+  stages: [tool.before]
+  expr: 'tool_name == "exec" && tool_args_command.matches("^su\\s+-|^su\\s+root")'
+  action: block
+  priority: high
+  reason: Switching to another user is not allowed
 
-rules:
-  - id: pe-002
-    title: Block user switching
-    description: Blocks switching to another user via su command
-    expr: 'tool_name == "exec" && tool_args_command.matches("^su\\s+-|^su\\s+root")'
-    action: block
-    priority: high
-    reason: Switching to another user is not allowed
+- id: pe-003
+  title: Block pkexec privilege escalation
+  description: Blocks privilege escalation via pkexec
+  stages: [tool.before]
+  expr: 'tool_name == "exec" && tool_args_command.contains("pkexec")'
+  action: block
+  priority: high
+  reason: Privilege escalation via pkexec is not allowed
 
-  - id: pe-003
-    title: Block pkexec privilege escalation
-    description: Blocks privilege escalation via pkexec
-    expr: 'tool_name == "exec" && tool_args_command.contains("pkexec")'
-    action: block
-    priority: high
-    reason: Privilege escalation via pkexec is not allowed
+- id: pe-004
+  title: Block doas privilege escalation
+  description: Blocks privilege escalation via doas command
+  stages: [tool.before]
+  expr: 'tool_name == "exec" && tool_args_command.matches("^doas\\s")'
+  action: block
+  priority: high
+  reason: Privilege escalation via doas is not allowed
 
-  - id: pe-004
-    title: Block doas privilege escalation
-    description: Blocks privilege escalation via doas command
-    expr: 'tool_name == "exec" && tool_args_command.matches("^doas\\s")'
-    action: block
-    priority: high
-    reason: Privilege escalation via doas is not allowed
+- id: pe-005
+  title: Block chown to root
+  description: Blocks changing file ownership to root
+  stages: [tool.before]
+  expr: 'tool_name == "exec" && tool_args_command.matches("chown\\s+root")'
+  action: block
+  priority: high
+  reason: Changing file ownership to root is not allowed
 
-  - id: pe-005
-    title: Block chown to root
-    description: Blocks changing file ownership to root
-    expr: 'tool_name == "exec" && tool_args_command.matches("chown\\s+root")'
-    action: block
-    priority: high
-    reason: Changing file ownership to root is not allowed
+- id: pe-006
+  title: Block setuid bit
+  description: Blocks setting the setuid bit on files
+  stages: [tool.before]
+  expr: 'tool_name == "exec" && tool_args_command.contains("chmod u+s")'
+  action: block
+  priority: high
+  reason: Setting setuid bit is not allowed
 
-  - id: pe-006
-    title: Block setuid bit
-    description: Blocks setting the setuid bit on files
-    expr: 'tool_name == "exec" && tool_args_command.contains("chmod u+s")'
-    action: block
-    priority: high
-    reason: Setting setuid bit is not allowed
-
-  - id: pe-007
-    title: Block sudoers modification
-    description: Blocks modifying the sudoers configuration
-    expr: 'tool_name == "exec" && (tool_args_command.contains("visudo") || tool_args_command.contains("/etc/sudoers"))'
-    action: block
-    priority: high
-    reason: Modifying sudoers configuration is not allowed
+- id: pe-007
+  title: Block sudoers modification
+  description: Blocks modifying the sudoers configuration
+  stages: [tool.before]
+  expr: 'tool_name == "exec" && (tool_args_command.contains("visudo") || tool_args_command.contains("/etc/sudoers"))'
+  action: block
+  priority: high
+  reason: Modifying sudoers configuration is not allowed

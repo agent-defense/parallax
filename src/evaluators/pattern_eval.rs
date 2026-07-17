@@ -5,7 +5,7 @@ use tracing::warn;
 
 use crate::engine::context::{EvalContext, Stage};
 use crate::engine::result::{Action, EvalResult};
-use crate::evaluators::Evaluator;
+use crate::evaluators::{parse_stage_list, union_rule_stages, Evaluator};
 
 /// A simple keyword / substring rule.
 struct PatternRule {
@@ -14,6 +14,7 @@ struct PatternRule {
     description: String,
     action: Action,
     priority: String,
+    stages: HashSet<Stage>,
     keywords: Vec<String>,
     case_sensitive: bool,
 }
@@ -33,17 +34,7 @@ impl PatternEvaluator {
     pub fn new(name: String, config: &serde_yaml::Value) -> Self {
         let map = config.as_mapping().cloned().unwrap_or_default();
 
-        let stages = map
-            .get(serde_yaml::Value::String("stages".into()))
-            .and_then(|v| v.as_sequence())
-            .map(|seq| {
-                seq.iter()
-                    .filter_map(|v| serde_yaml::from_str(v.as_str()?).ok())
-                    .collect()
-            })
-            .unwrap_or_else(|| [Stage::ToolBefore, Stage::ToolAfter].into_iter().collect());
-
-        let rules = map
+        let rules: Vec<PatternRule> = map
             .get(serde_yaml::Value::String("rules".into()))
             .and_then(|v| v.as_sequence())
             .map(|seq| {
@@ -54,6 +45,20 @@ impl PatternEvaluator {
                             .get(serde_yaml::Value::String("id".into()))?
                             .as_str()?
                             .to_string();
+                        let stages = match parse_stage_list(
+                            m.get(serde_yaml::Value::String("stages".into())),
+                        )
+                        .filter(|s| !s.is_empty())
+                        {
+                            Some(s) => s,
+                            None => {
+                                warn!(
+                                    id,
+                                    "Pattern rule missing mandatory non-empty `stages:`, skipping"
+                                );
+                                return None;
+                            }
+                        };
                         let title = m
                             .get(serde_yaml::Value::String("title".into()))
                             .and_then(|v| v.as_str())
@@ -108,6 +113,7 @@ impl PatternEvaluator {
                             description,
                             action,
                             priority,
+                            stages,
                             keywords,
                             case_sensitive,
                         })
@@ -115,6 +121,12 @@ impl PatternEvaluator {
                     .collect()
             })
             .unwrap_or_default();
+
+        let fallback: HashSet<Stage> =
+            parse_stage_list(map.get(serde_yaml::Value::String("stages".into())))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| [Stage::ToolBefore, Stage::ToolAfter].into_iter().collect());
+        let stages = union_rule_stages(rules.iter().map(|r| &r.stages), &fallback);
 
         Self {
             name,
@@ -142,6 +154,9 @@ impl Evaluator for PatternEvaluator {
         let text = ctx.searchable_text();
 
         for rule in &self.rules {
+            if !rule.stages.contains(&ctx.stage) {
+                continue;
+            }
             for keyword in &rule.keywords {
                 let matched = if rule.case_sensitive {
                     text.contains(keyword.as_str())
@@ -209,6 +224,7 @@ mod tests {
 stages: [tool.before]
 rules:
   - id: test-001
+    stages: [tool.before]
     title: "sql danger"
     keywords: ["DROP TABLE", "DELETE FROM"]
     action: detect
@@ -226,6 +242,7 @@ rules:
 stages: [tool.before]
 rules:
   - id: test-001
+    stages: [tool.before]
     title: "sql danger"
     keywords: ["DROP TABLE"]
     action: block
@@ -243,6 +260,7 @@ rules:
 stages: [tool.before]
 rules:
   - id: test-002
+    stages: [tool.before]
     title: "exact match"
     keywords: ["SECRET"]
     action: block

@@ -1,26 +1,26 @@
 # Data exfiltration — regex rules
 # Auto-discovered. Evaluator name = filename stem (`data-exfiltration`).
 
-stages: [tool.before, tool.after]
+- id: exfil-001
+  title: Base64-encoded secret indicator
+  description: Detects base64-encoded values following secret-like key names
+  stages: [tool.before, tool.after]
+  pattern: "(?i)(password|secret|token|key)[=:]\\s*[A-Za-z0-9+/]{40,}={0,2}"
+  action: detect
+  priority: medium
 
-rules:
-  - id: exfil-001
-    title: Base64-encoded secret indicator
-    description: Detects base64-encoded values following secret-like key names
-    pattern: "(?i)(password|secret|token|key)[=:]\\s*[A-Za-z0-9+/]{40,}={0,2}"
-    action: detect
-    priority: medium
+- id: exfil-002
+  title: Long hex-encoded data block
+  description: Detects long hex-encoded strings that may indicate data exfiltration
+  stages: [tool.before, tool.after]
+  pattern: "\\b[0-9a-fA-F]{64,}\\b"
+  action: detect
+  priority: low
 
-  - id: exfil-002
-    title: Long hex-encoded data block
-    description: Detects long hex-encoded strings that may indicate data exfiltration
-    pattern: "\\b[0-9a-fA-F]{64,}\\b"
-    action: detect
-    priority: low
-
-  - id: exfil-003
-    title: Data URI with base64
-    description: Detects data URIs with large base64 payloads
-    pattern: "data:[a-z/]+;base64,[A-Za-z0-9+/]{100,}"
-    action: detect
-    priority: low
+- id: exfil-003
+  title: Data URI with base64
+  description: Detects data URIs with large base64 payloads
+  stages: [tool.before, tool.after]
+  pattern: "data:[a-z/]+;base64,[A-Za-z0-9+/]{100,}"
+  action: detect
+  priority: low

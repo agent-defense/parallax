@@ -3,6 +3,7 @@ id: pi-001
 status: stable
 description: Detects messages attempting to extract the system prompt or initial instructions
 priority: high
+stages: [message.before]
 logsource:
   product: parallax
   service: message
@@ -32,6 +33,7 @@ id: pi-002
 status: stable
 description: Detects common jailbreak and guardrail bypass attempts
 priority: high
+stages: [message.before]
 logsource:
   product: parallax
   service: message
@@ -60,6 +62,7 @@ id: pi-003
 status: stable
 description: Detects attempts to redefine the agent role or bypass constraints via role-play
 priority: medium
+stages: [message.before]
 logsource:
   product: parallax
   service: message

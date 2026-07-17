@@ -3,6 +3,7 @@ id: shadow-001
 status: stable
 description: Detects agent creating, running, or building containers without approval
 priority: medium
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -26,6 +27,7 @@ id: shadow-002
 status: stable
 description: Detects agent deploying or modifying Kubernetes resources
 priority: medium
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -49,6 +51,7 @@ id: shadow-003
 status: stable
 description: Detects agent provisioning or modifying cloud infrastructure
 priority: high
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -74,6 +77,7 @@ id: shadow-004
 status: stable
 description: Detects agent creating or modifying system user accounts
 priority: medium
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool

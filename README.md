@@ -55,7 +55,7 @@ Requires [Rust](https://rustup.rs/) 1.70+. No other dependencies.
 ./parallax serve
 ```
 
-This auto-discovers `parallax.yaml` in the current directory. If a `rules/` directory sits next to it, the full curated rule set under [`rules/`](rules/) is auto-discovered too (one evaluator per file, each declaring its own `stages:`). Drop `rules/` and only the inline starter rules in `parallax.yaml` load — useful for a stripped-down install.
+This auto-discovers `parallax.yaml` in the current directory. If a `rules/` directory sits next to it, the full curated rule set under [`rules/`](rules/) is auto-discovered too (one evaluator per file; each rule declares its own `stages:`). Drop `rules/` and only the inline starter rules in `parallax.yaml` load — useful for a stripped-down install.
 
 To point at a config in another location:
 
@@ -141,21 +141,19 @@ evaluators:
 
 ### Rules tree (auto-discovered)
 
-If a `rules/` directory sits next to `parallax.yaml` (or you point `rules_dir:` at one), every file under `<rules_dir>/<engine>/*.yaml` is auto-loaded as its own evaluator. Each rule file declares a mandatory root-level `stages:` array followed by a flat `rules:` list:
+If a `rules/` directory sits next to `parallax.yaml` (or you point `rules_dir:` at one), every file under `<rules_dir>/<engine>/*.yaml` is auto-loaded as its own evaluator. Rule files are **flat YAML lists**. Every rule must declare its own `stages:` array:
 
 ```yaml
-stages: [tool.before]
-
-rules:
-  - id: sc-001
-    title: Custom PyPI index
-    description: Detects pip installs from non-default package indexes
-    keywords: ["--index-url ", "--extra-index-url "]
-    action: detect
-    priority: medium
+- id: sc-001
+  title: Custom PyPI index
+  description: Detects pip installs from non-default package indexes
+  stages: [tool.before]
+  keywords: ["--index-url ", "--extra-index-url "]
+  action: detect
+  priority: medium
 ```
 
-Every rule carries the mandatory fields `id`, `title`, `description`, `action`, `priority` (plus engine-specific fields like `pattern`, `keywords`, `expr`, or `query`). A file missing the root-level `stages:` array is rejected at load time.
+Mandatory fields per rule: `id`, `title`, `description`, `stages`, `action`, `priority` (plus engine-specific fields like `pattern`, `keywords`, `expr`, or `query`). A rule missing `stages:` is skipped at load time.
 
 When an inline rule id (in `evaluators:`) collides with a discovered rule id (in `rules/`), the discovered version wins — so dropping a `rules/` tree in cleanly upgrades the inline starter to the full curated set.
 

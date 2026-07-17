@@ -3,6 +3,7 @@ id: dt-001
 status: stable
 description: Detects tool calls that write files to sensitive system directories
 priority: high
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -25,6 +26,7 @@ id: dt-002
 status: stable
 description: Detects exec tool calls that combine data access with network transfer
 priority: high
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -49,6 +51,7 @@ id: dt-003
 status: stable
 description: Detects tool calls that read database configuration or credential files
 priority: high
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool

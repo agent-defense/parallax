@@ -1,18 +1,16 @@
 # SQL injection — keyword pattern rules
 # Auto-discovered. Evaluator name = filename stem (`sql-keywords`).
 
-stages: [message.before, tool.before]
-
-rules:
-  - id: sql-001
-    title: SQL destructive keywords
-    description: Detects common SQL injection and destructive query patterns
-    keywords:
-      - "DROP TABLE"
-      - "DROP DATABASE"
-      - "DELETE FROM"
-      - "TRUNCATE TABLE"
-      - "'; --"
-      - "1=1"
-    action: detect
-    priority: medium
+- id: sql-001
+  title: SQL destructive keywords
+  description: Detects common SQL injection and destructive query patterns
+  stages: [message.before, tool.before]
+  keywords:
+    - "DROP TABLE"
+    - "DROP DATABASE"
+    - "DELETE FROM"
+    - "TRUNCATE TABLE"
+    - "'; --"
+    - "1=1"
+  action: detect
+  priority: medium

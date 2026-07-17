@@ -19,7 +19,7 @@ pub struct PlatformConfig {
     /// Root of the rules tree to auto-discover. When set (or when `./rules`
     /// exists next to the config file), the loader walks
     /// `<rules_dir>/<engine>/*.yaml` and registers one evaluator per file.
-    /// Each rule file declares its own mandatory root-level `stages:` array.
+    /// Each rule declares its own mandatory `stages:` array.
     #[serde(default)]
     pub rules_dir: Option<String>,
     /// Evaluator names to suppress after auto-discovery (matches both

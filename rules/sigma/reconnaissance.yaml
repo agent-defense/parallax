@@ -3,6 +3,7 @@ id: recon-001
 status: stable
 description: Detects tool calls reading credential files, SSH keys, or secret stores
 priority: high
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -40,6 +41,7 @@ id: recon-002
 status: stable
 description: Detects reads of system files commonly targeted for information gathering
 priority: medium
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -68,6 +70,7 @@ id: recon-003
 status: stable
 description: Detects access to cloud instance metadata services used for credential theft
 priority: high
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
@@ -87,6 +90,7 @@ id: recon-004
 status: stable
 description: Detects reads of Kubernetes, Docker, and container configuration files
 priority: medium
+stages: [tool.before]
 logsource:
   product: parallax
   service: tool
