@@ -1,38 +1,41 @@
 # PII detection — regex rules
 # Auto-discovered. Evaluator name = filename stem (`pii`).
-# Default stages: tool.before, tool.after (override in parallax.yaml to tool.after only).
+# Scans tool RESULTS only, not agent prompts.
 
-- id: pii-001
-  title: Social Security Number
-  description: Detects US Social Security Numbers in NNN-NN-NNNN format
-  pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
-  action: redact
-  priority: high
+stages: [tool.after]
 
-- id: pii-002
-  title: Credit Card - Visa
-  description: Detects Visa credit card numbers
-  pattern: "\\b4\\d{3}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
-  action: redact
-  priority: high
+rules:
+  - id: pii-001
+    title: Social Security Number
+    description: Detects US Social Security Numbers in NNN-NN-NNNN format
+    pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+    action: redact
+    priority: high
 
-- id: pii-003
-  title: Credit Card - Mastercard
-  description: Detects Mastercard credit card numbers
-  pattern: "\\b5[1-5]\\d{2}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
-  action: redact
-  priority: high
+  - id: pii-002
+    title: Credit Card - Visa
+    description: Detects Visa credit card numbers
+    pattern: "\\b4\\d{3}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
+    action: redact
+    priority: high
 
-- id: pii-004
-  title: Credit Card - Amex
-  description: Detects American Express credit card numbers
-  pattern: "\\b3[47]\\d{2}[- ]?\\d{6}[- ]?\\d{5}\\b"
-  action: redact
-  priority: high
+  - id: pii-003
+    title: Credit Card - Mastercard
+    description: Detects Mastercard credit card numbers
+    pattern: "\\b5[1-5]\\d{2}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
+    action: redact
+    priority: high
 
-- id: pii-005
-  title: US Phone Number
-  description: Detects US phone numbers in various formats
-  pattern: "\\b(?:\\+1[- ]?)?\\(?\\d{3}\\)?[- ]?\\d{3}[- ]?\\d{4}\\b"
-  action: redact
-  priority: medium
+  - id: pii-004
+    title: Credit Card - Amex
+    description: Detects American Express credit card numbers
+    pattern: "\\b3[47]\\d{2}[- ]?\\d{6}[- ]?\\d{5}\\b"
+    action: redact
+    priority: high
+
+  - id: pii-005
+    title: US Phone Number
+    description: Detects US phone numbers in various formats
+    pattern: "\\b(?:\\+1[- ]?)?\\(?\\d{3}\\)?[- ]?\\d{3}[- ]?\\d{4}\\b"
+    action: redact
+    priority: medium

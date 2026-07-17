@@ -1,42 +1,44 @@
 # Supply-chain — keyword pattern rules
 # Auto-discovered. Evaluator name = filename stem (`supply-chain`).
-# Default stages: tool.before.
 
-- id: sc-001
-  title: Pip install from custom index
-  description: Blocks pip installs from non-default package indexes
-  keywords:
-    - "pip install --index-url"
-    - "pip install --extra-index-url"
-    - "pip install -i http"
-  action: block
-  priority: high
+stages: [tool.before]
 
-- id: sc-002
-  title: Npm install from custom registry
-  description: Blocks npm installs from non-default registries
-  keywords:
-    - "npm install --registry"
-    - "npm config set registry"
-    - "yarn config set registry"
-  action: block
-  priority: high
+rules:
+  - id: sc-001
+    title: Pip install from custom index
+    description: Blocks pip installs from non-default package indexes
+    keywords:
+      - "pip install --index-url"
+      - "pip install --extra-index-url"
+      - "pip install -i http"
+    action: block
+    priority: high
 
-- id: sc-003
-  title: Wget pipe to shell
-  description: Blocks piping wget output directly to a shell interpreter
-  keywords:
-    - "wget -O - | bash"
-    - "wget -O - | sh"
-    - "wget -q -O - | bash"
-  action: block
-  priority: high
+  - id: sc-002
+    title: Npm install from custom registry
+    description: Blocks npm installs from non-default registries
+    keywords:
+      - "npm install --registry"
+      - "npm config set registry"
+      - "yarn config set registry"
+    action: block
+    priority: high
 
-- id: sc-004
-  title: Gem install from custom source
-  description: Blocks gem installs from non-default sources
-  keywords:
-    - "gem install --source http"
-    - "gem sources --add http"
-  action: block
-  priority: high
+  - id: sc-003
+    title: Wget pipe to shell
+    description: Blocks piping wget output directly to a shell interpreter
+    keywords:
+      - "wget -O - | bash"
+      - "wget -O - | sh"
+      - "wget -q -O - | bash"
+    action: block
+    priority: high
+
+  - id: sc-004
+    title: Gem install from custom source
+    description: Blocks gem installs from non-default sources
+    keywords:
+      - "gem install --source http"
+      - "gem sources --add http"
+    action: block
+    priority: high

@@ -18,27 +18,14 @@ pub struct PlatformConfig {
     pub evaluators_dir: Option<String>,
     /// Root of the rules tree to auto-discover. When set (or when `./rules`
     /// exists next to the config file), the loader walks
-    /// `<rules_dir>/<engine>/*.yaml` and registers one evaluator per file
-    /// using engine-default stages.
+    /// `<rules_dir>/<engine>/*.yaml` and registers one evaluator per file.
+    /// Each rule file declares its own mandatory root-level `stages:` array.
     #[serde(default)]
     pub rules_dir: Option<String>,
-    /// Per-evaluator overrides keyed by name (e.g. custom `stages` for a
-    /// rules-tree-discovered evaluator). Applied after auto-discovery.
-    #[serde(default)]
-    pub evaluator_overrides: std::collections::HashMap<String, EvaluatorOverride>,
     /// Evaluator names to suppress after auto-discovery (matches both
     /// inline `evaluators` and rules-tree-discovered ones).
     #[serde(default)]
     pub disabled: Vec<String>,
-}
-
-/// Optional overrides for a discovered or inline evaluator.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct EvaluatorOverride {
-    #[serde(default)]
-    pub stages: Option<Vec<String>>,
-    #[serde(default)]
-    pub enabled: Option<bool>,
 }
 
 /// HTTP server bind address. Defaults to `127.0.0.1:9920`.

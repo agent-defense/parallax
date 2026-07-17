@@ -1,16 +1,18 @@
 # SQL injection — keyword pattern rules
 # Auto-discovered. Evaluator name = filename stem (`sql-keywords`).
-# Default stages: tool.before (override in parallax.yaml to also scan messages).
 
-- id: sql-001
-  title: SQL destructive keywords
-  description: Detects common SQL injection and destructive query patterns
-  keywords:
-    - "DROP TABLE"
-    - "DROP DATABASE"
-    - "DELETE FROM"
-    - "TRUNCATE TABLE"
-    - "'; --"
-    - "1=1"
-  action: detect
-  priority: medium
+stages: [message.before, tool.before]
+
+rules:
+  - id: sql-001
+    title: SQL destructive keywords
+    description: Detects common SQL injection and destructive query patterns
+    keywords:
+      - "DROP TABLE"
+      - "DROP DATABASE"
+      - "DELETE FROM"
+      - "TRUNCATE TABLE"
+      - "'; --"
+      - "1=1"
+    action: detect
+    priority: medium
