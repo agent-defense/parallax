@@ -271,7 +271,7 @@ Three loading paths exist; in order of preference:
 
 | Source | Used by | Behavior |
 |--------|---------|----------|
-| `rules/` auto-discovery | `regex`, `pattern`, `cel`, `sql`, `sigma` | Default. The loader walks `./rules/<engine>/*.yaml` and registers one evaluator per file. Evaluator name = filename stem. Stages = engine-typical defaults unless the file carries an `evaluator: { stages: [...] }` header. Override the root with `rules_dir:` in `parallax.yaml`. |
+| `rules/` auto-discovery | `regex`, `pattern`, `cel`, `sql`, `sigma` | Default. The loader walks `./rules/<engine>/*.yaml` and registers one evaluator per file. Each file is a **flat YAML list** of rules. Evaluator name = filename stem. Stages = engine-typical defaults, overridable via `evaluator_overrides` in `parallax.yaml`. |
 | `rules:` (inline) | all | Rules embedded under `evaluators:` in `parallax.yaml`. Used for the shipped starter set. |
 | `rules_file: <path>`, `rules_dir: <path>` on an inline evaluator | `regex`, `pattern`, `cel`, `sql`, `sigma` | Explicit external references — appended to that evaluator's `rules:` list at load time. |
 
@@ -299,7 +299,7 @@ action: block    # block, detect, redact, or allow
 
 ### Adding a CEL rule
 
-Append to one of the existing files in `rules/cel/`, or drop a new `rules/cel/<name>.yaml`. A bare list works for default stages; add an `evaluator:` header to override stages or the evaluator name. Pick a category prefix (`pol`, `pe`, `mm`, or your own) and a free numeric slot:
+Append to one of the existing files in `rules/cel/`, or drop a new `rules/cel/<name>.yaml` (flat list). Pick a category prefix (`pol`, `pe`, `mm`, or your own) and a free numeric slot:
 
 ```yaml
 - id: pol-099

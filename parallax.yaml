@@ -5,21 +5,23 @@
 # (or use -c <path> to point at one explicitly).
 #
 # Sections:
-#   server      — HTTP bind address
-#   proxy       — Upstream LLM provider for proxy mode
-#   reporting   — Audit log + webhook configuration
-#   evaluators  — Inline starter rules (so the server is useful even
-#                 without a rules/ directory)
-#   rules_dir   — Optional. Defaults to ./rules next to this file when
-#                 that directory exists. Auto-discovers every file under
-#                 <rules_dir>/<engine>/*.yaml.
-#   disabled    — Optional. Suppress specific evaluators by name.
+#   server               — HTTP bind address
+#   proxy                — Upstream LLM provider for proxy mode
+#   reporting            — Audit log + webhook configuration
+#   evaluators           — Inline starter rules (so the server is useful even
+#                          without a rules/ directory)
+#   evaluator_overrides  — Per-evaluator stage/enabled tweaks (by name)
+#   rules_dir            — Optional. Defaults to ./rules next to this file when
+#                          that directory exists. Auto-discovers every file under
+#                          <rules_dir>/<engine>/*.yaml.
+#   disabled             — Optional. Suppress specific evaluators by name.
 #
 # Rule resolution:
 #   - Inline `evaluators:` below are loaded first.
 #   - If a rules/ tree is present, every file under it is auto-discovered
-#     with engine-typical default stages (override per-file via an
-#     `evaluator: { stages: [...] }` header).
+#     with engine-typical default stages.
+#   - `evaluator_overrides` adjusts stages/enabled on discovered evaluators
+#     by name (evaluator name = rule filename stem).
 #   - When an inline rule id collides with a discovered rule id, the
 #     discovered version wins (so dropping a rules/ tree in gives you
 #     the curated set, not the stub).
@@ -46,7 +48,16 @@ reporting:
 # Optional: suppress specific evaluators by name (matches both inline
 # evaluators below and rules/-discovered ones).
 # disabled:
-#   - pii-scanner
+#   - pii
+
+# Stage overrides for auto-discovered evaluators (name = filename stem).
+evaluator_overrides:
+  pii:
+    stages: [tool.after]
+  dangerous-commands:
+    stages: [tool.before]
+  sql-keywords:
+    stages: [message.before, tool.before]
 
 # Minimal essentials so a bare `parallax serve` (no rules/ directory)
 # still blocks the obvious. When the rules/ tree is present, these ids

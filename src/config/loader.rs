@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::{error, info, warn};
 
-use crate::config::schema::{EvaluatorConfig, PlatformConfig};
+use crate::config::schema::{EvaluatorConfig, EvaluatorOverride, PlatformConfig};
 
 /// Evaluator types whose rule loading from external files is handled here
 /// (i.e. `rules_file` / `rules_dir` produce flat rule lists merged into `rules`).
@@ -253,12 +253,9 @@ fn expand_rule_sources(evaluators: &mut [EvaluatorConfig], config_root: &Path) {
 /// `EvaluatorConfig` per rule file (regex/pattern/cel/sql) and one combined
 /// sigma evaluator that points the existing Sigma loader at `<rules_root>/sigma/`.
 ///
-/// Each non-Sigma rule file may either be:
-///   - a bare YAML sequence of rule entries (no header), or
-///   - a YAML mapping with `evaluator: { name?, stages?, enabled? }` and `rules: [...]`.
-///
-/// Missing fields fall back to engine-typical defaults; missing files / dirs
-/// are silent.
+/// Each non-Sigma rule file must be a flat YAML sequence of rule entries.
+/// Evaluator name = filename stem; stages = engine-typical defaults unless
+/// overridden by an inline evaluator in `parallax.yaml` (matched by name).
 fn discover_rules_tree(rules_root: &Path) -> Vec<EvaluatorConfig> {
     if !rules_root.is_dir() {
         return Vec::new();
@@ -325,9 +322,9 @@ fn discover_rules_tree(rules_root: &Path) -> Vec<EvaluatorConfig> {
     discovered
 }
 
-/// Parse a single rule file into an `EvaluatorConfig`. Accepts either:
-///   - a YAML sequence of rule entries (bare list), or
-///   - a YAML mapping with an `evaluator:` header and a `rules:` body.
+/// Parse a flat rule file (YAML sequence of rule entries) into an
+/// `EvaluatorConfig`. Mapping documents (legacy `evaluator:`/`rules:` wrappers)
+/// are rejected with a warning.
 fn parse_rule_file(path: &Path, engine: &str) -> Option<EvaluatorConfig> {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
@@ -360,42 +357,13 @@ fn parse_rule_file(path: &Path, engine: &str) -> Option<EvaluatorConfig> {
             rules_dir: None,
             extra: Default::default(),
         }),
-        serde_yaml::Value::Mapping(map) => {
-            let header = map
-                .get(serde_yaml::Value::String("evaluator".into()))
-                .and_then(|v| v.as_mapping());
-            let name = header
-                .and_then(|m| m.get(serde_yaml::Value::String("name".into())))
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .unwrap_or(default_name);
-            let enabled = header
-                .and_then(|m| m.get(serde_yaml::Value::String("enabled".into())))
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let stages = header
-                .and_then(|m| m.get(serde_yaml::Value::String("stages".into())))
-                .and_then(|v| v.as_sequence())
-                .map(|seq| {
-                    seq.iter()
-                        .filter_map(|v| v.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_else(|| default_stages_for(engine));
-            let rules = map
-                .get(serde_yaml::Value::String("rules".into()))
-                .and_then(|v| v.as_sequence())
-                .cloned()
-                .unwrap_or_default();
-            Some(EvaluatorConfig {
-                name,
-                eval_type: engine.to_string(),
-                enabled,
-                stages,
-                rules,
-                rules_dir: None,
-                extra: Default::default(),
-            })
+        serde_yaml::Value::Mapping(_) => {
+            warn!(
+                path = %path.display(),
+                "Rule file must be a flat YAML list of rules; \
+                 evaluator metadata belongs in parallax.yaml, not in rule files"
+            );
+            None
         }
         serde_yaml::Value::Null => None,
         _ => None,
@@ -449,6 +417,27 @@ fn drop_overridden_inline_rules(
     }
 }
 
+/// Apply `evaluator_overrides` from parallax.yaml (stages, enabled).
+fn apply_evaluator_overrides(
+    evaluators: &mut [EvaluatorConfig],
+    overrides: &HashMap<String, EvaluatorOverride>,
+) {
+    if overrides.is_empty() {
+        return;
+    }
+    for ec in evaluators.iter_mut() {
+        if let Some(ov) = overrides.get(&ec.name) {
+            if let Some(stages) = &ov.stages {
+                info!(name = %ec.name, stages = ?stages, "Applied evaluator stage override");
+                ec.stages = stages.clone();
+            }
+            if let Some(enabled) = ov.enabled {
+                ec.enabled = enabled;
+            }
+        }
+    }
+}
+
 /// Load and validate the platform configuration from a YAML file.
 ///
 /// Behaviour:
@@ -457,7 +446,9 @@ fn drop_overridden_inline_rules(
 ///      evaluator definitions from there (legacy path; unchanged).
 ///   3. If `rules_dir` is set, or `./rules` exists next to the config file,
 ///      auto-discover evaluators from `<rules_dir>/<engine>/*.yaml` using
-///      engine-default stages unless a file carries an `evaluator:` header.
+///      engine-default stages. Skips files whose evaluator name is already
+///      declared inline in `parallax.yaml` (so inline `rules_file` + custom
+///      stages take precedence).
 ///   4. Inline rules whose `id` matches a discovered rule are dropped (the
 ///      rules-tree version wins).
 ///   5. Any evaluator whose name is in `disabled:` is removed.
@@ -531,12 +522,25 @@ pub fn load_config(path: Option<&str>) -> Result<PlatformConfig, String> {
             let overridden = collect_rule_ids(&discovered);
             drop_overridden_inline_rules(&mut config.evaluators, &overridden);
 
-            // Append discovered evaluators after inline ones.
-            config.evaluators.extend(discovered);
+            // Append discovered evaluators, skipping names already declared inline.
+            let existing: HashSet<String> =
+                config.evaluators.iter().map(|e| e.name.clone()).collect();
+            for ec in discovered {
+                if existing.contains(&ec.name) {
+                    info!(
+                        name = %ec.name,
+                        "Skipping auto-discovered evaluator; inline definition in parallax.yaml takes precedence"
+                    );
+                    continue;
+                }
+                config.evaluators.push(ec);
+            }
         }
     }
 
     // Apply `disabled:` filter.
+    apply_evaluator_overrides(&mut config.evaluators, &config.evaluator_overrides);
+
     if !config.disabled.is_empty() {
         let drop: HashSet<&str> = config.disabled.iter().map(String::as_str).collect();
         let before = config.evaluators.len();
@@ -850,9 +854,9 @@ evaluators:
         assert_eq!(policies.stages, default_stages_for("cel"));
     }
 
-    /// Per-file `evaluator:` header overrides name + stages + enabled.
+    /// Nested `evaluator:`/`rules:` documents are rejected; use flat lists.
     #[test]
-    fn test_discover_rules_tree_respects_header() {
+    fn test_discover_rules_tree_rejects_nested_format() {
         let dir = tempfile::tempdir().unwrap();
         let regex_dir = dir.path().join("regex");
         std::fs::create_dir(&regex_dir).unwrap();
@@ -872,11 +876,7 @@ rules:
         .unwrap();
 
         let discovered = discover_rules_tree(dir.path());
-        assert_eq!(discovered.len(), 1);
-        let pii = &discovered[0];
-        assert_eq!(pii.name, "pii-scanner");
-        assert_eq!(pii.stages, vec!["tool.after".to_string()]);
-        assert_eq!(pii.rules.len(), 1);
+        assert!(discovered.is_empty());
     }
 
     /// Sigma engine discovery emits a single evaluator that delegates to the
@@ -980,7 +980,7 @@ evaluators:
         std::fs::write(
             &cfg_path,
             r#"
-disabled: [pii-scanner]
+disabled: [pii]
 "#,
         )
         .unwrap();
@@ -989,16 +989,7 @@ disabled: [pii-scanner]
         std::fs::create_dir_all(&regex_dir).unwrap();
         std::fs::write(
             regex_dir.join("pii.yaml"),
-            r#"
-evaluator:
-  name: pii-scanner
-  stages: [tool.after]
-rules:
-  - id: pii-001
-    title: ssn
-    pattern: "\\d+"
-    action: redact
-"#,
+            "- {id: pii-001, title: ssn, description: test, pattern: \"\\\\d+\", action: redact, priority: high}\n",
         )
         .unwrap();
         std::fs::write(
@@ -1009,7 +1000,35 @@ rules:
 
         let config = load_config(Some(cfg_path.to_str().unwrap())).unwrap();
         assert!(config.evaluators.iter().any(|e| e.name == "secrets"));
-        assert!(!config.evaluators.iter().any(|e| e.name == "pii-scanner"));
+        assert!(!config.evaluators.iter().any(|e| e.name == "pii"));
+    }
+
+    /// `evaluator_overrides` adjusts stages on auto-discovered evaluators.
+    #[test]
+    fn test_load_config_evaluator_overrides() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg_path = dir.path().join("parallax.yaml");
+        std::fs::write(
+            &cfg_path,
+            r#"
+evaluator_overrides:
+  pii:
+    stages: [tool.after]
+"#,
+        )
+        .unwrap();
+
+        let regex_dir = dir.path().join("rules").join("regex");
+        std::fs::create_dir_all(&regex_dir).unwrap();
+        std::fs::write(
+            regex_dir.join("pii.yaml"),
+            "- {id: pii-001, title: ssn, description: test, pattern: \"\\\\d+\", action: redact, priority: high}\n",
+        )
+        .unwrap();
+
+        let config = load_config(Some(cfg_path.to_str().unwrap())).unwrap();
+        let pii = config.evaluators.iter().find(|e| e.name == "pii").unwrap();
+        assert_eq!(pii.stages, vec!["tool.after".to_string()]);
     }
 
     /// When `./rules` is absent, only the inline evaluators survive.
